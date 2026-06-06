@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(python *)",
+      "Bash(echo \"Flask started, PID: $!\")",
+      "Bash(curl -s -X POST http://localhost:5000/api/init-db)",
+      "Bash(curl -s http://localhost:5000/api/init-db -X POST)",
+      "Bash(npm install *)",
+      "Bash(npx vite *)",
+      "Bash(curl *)",
+      "Bash(pkill -f \"python app.py\")",
+      "Bash(ipconfig)",
+      "Bash(netstat -ano)",
+      "Bash(tasklist)",
+      "Bash(taskkill //F //PID 3952)",
+      "WebSearch",
+      "WebFetch(domain:open.yunzhijia.com)",
+      "Bash(date +%s%3N)",
+      "Bash(head -50)",
+      "Bash(echo \"===\")",
+      "Bash(echo '__TRACKED_VAR__.json → __TRACKED_VAR__')",
+      "Bash(where git *)",
+      "Read(//c/Program Files/Git/bin/**)",
+      "Read(//c/Program Files \\(x86\\)/Git/bin/**)",
+      "Bash(cmd.exe /c \"where git\")",
+      "Bash(powershell.exe -Command \"Get-Command git -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(cmd.exe /c \"where gh\")",
+      "Bash(cmd.exe /c \"python --version\")",
+      "Bash(cmd.exe /c \"python3 --version\")",
+      "Bash(cmd.exe /c \"where python\")",
+      "Bash(\"C:/Program Files/Python310/python.exe\" --version)",
+      "Bash(\"C:/Python310/python.exe\" --version)",
+      "Read(//c/Users/Administrator/AppData/Local/Programs/**)",
+      "Bash('C:/Program Files/Python310/python.exe' -c ' *)"
+    ]
+  }
+}
