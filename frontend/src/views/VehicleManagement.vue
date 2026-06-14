@@ -1,14 +1,20 @@
 <template>
   <div>
-    <el-card>
+    <el-card class="page-card">
       <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:18px;font-weight:bold">车辆管理</span>
-          <el-button type="primary" @click="showAdd">添加车辆</el-button>
+        <div class="page-header">
+          <div class="page-title">
+            <el-icon :size="20"><Van /></el-icon>
+            <span>车辆管理</span>
+          </div>
+          <el-button type="primary" @click="showAdd">
+            <el-icon><Plus /></el-icon>
+            <span style="margin-left:4px">添加车辆</span>
+          </el-button>
         </div>
       </template>
 
-      <el-table :data="vehicles" border stripe>
+      <el-table :data="vehicles" stripe style="width:100%">
         <el-table-column prop="id" label="ID" width="60" align="center" />
         <el-table-column prop="plate_number" label="车牌号" min-width="120" />
         <el-table-column prop="vehicle_type" label="车辆类型" min-width="140" />

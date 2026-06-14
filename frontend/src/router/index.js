@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   { path: '/login', name: 'Login', component: () => import('../views/Login.vue') },
+  { path: '/confirm/:token', name: 'ConfirmSchedule', component: () => import('../views/ConfirmSchedule.vue') },
   {
     path: '/',
     component: () => import('../views/Layout.vue'),
@@ -13,7 +14,8 @@ const routes = [
       { path: 'drivers', name: 'Drivers', component: () => import('../views/DriverManagement.vue'), meta: { permission: 'driver' } },
       { path: 'vehicles', name: 'Vehicles', component: () => import('../views/VehicleManagement.vue'), meta: { permission: 'vehicle' } },
       { path: 'labor-rates', name: 'LaborRates', component: () => import('../views/LaborRateManagement.vue'), meta: { permission: 'labor_rate' } },
-      { path: 'clients', name: 'Clients', component: () => import('../views/ClientManagement.vue'), meta: { permission: 'client' } }
+      { path: 'clients', name: 'Clients', component: () => import('../views/ClientManagement.vue'), meta: { permission: 'client' } },
+      { path: 'confirmations', name: 'Confirmations', component: () => import('../views/ConfirmationManagement.vue'), meta: { permission: 'task' } }
     ]
   }
 ]
@@ -24,7 +26,11 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  if (to.path !== '/login') {
+  // 公开页面：登录页、确认页
+  const publicPages = ['/login', '/confirm']
+  const isPublicPage = publicPages.some(page => to.path.startsWith(page))
+
+  if (!isPublicPage) {
     const user = JSON.parse(localStorage.getItem('user') || 'null')
     if (!user) {
       next('/login')

@@ -1,14 +1,20 @@
 <template>
   <div>
-    <el-card>
+    <el-card class="page-card">
       <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:18px;font-weight:bold">权限控制</span>
-          <el-button type="primary" @click="showAddUser">添加用户</el-button>
+        <div class="page-header">
+          <div class="page-title">
+            <el-icon :size="20"><Setting /></el-icon>
+            <span>权限控制</span>
+          </div>
+          <el-button type="primary" @click="showAddUser">
+            <el-icon><Plus /></el-icon>
+            <span style="margin-left:4px">添加用户</span>
+          </el-button>
         </div>
       </template>
 
-      <el-table :data="users" border stripe>
+      <el-table :data="users" stripe style="width:100%">
         <el-table-column prop="id" label="ID" width="60" align="center" />
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column prop="role" label="角色" width="100" align="center">

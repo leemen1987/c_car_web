@@ -1,0 +1,16 @@
+[Unit]
+Description=Charter Bus Scheduling Vite Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=xxb
+Group=xxb
+WorkingDirectory=/home/xxb/c_car_web/frontend
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/npm run dev -- --host 127.0.0.1 --port 5173
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

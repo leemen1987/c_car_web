@@ -1,14 +1,20 @@
 <template>
   <div>
-    <el-card>
+    <el-card class="page-card">
       <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:18px;font-weight:bold">用车单位管理</span>
-          <el-button type="primary" @click="showAdd">新增用车单位</el-button>
+        <div class="page-header">
+          <div class="page-title">
+            <el-icon :size="20"><OfficeBuilding /></el-icon>
+            <span>用车单位管理</span>
+          </div>
+          <el-button type="primary" @click="showAdd">
+            <el-icon><Plus /></el-icon>
+            <span style="margin-left:4px">新增用车单位</span>
+          </el-button>
         </div>
       </template>
 
-      <el-table :data="clients" border stripe>
+      <el-table :data="clients" stripe style="width:100%">
         <el-table-column prop="id" label="ID" width="60" align="center" />
         <el-table-column prop="name" label="单位名称" min-width="160" />
         <el-table-column prop="address" label="地址" min-width="200" />
@@ -55,10 +61,30 @@
         <el-button type="primary" size="small" @click="showAddContact">添加联系人</el-button>
       </div>
       <el-table :data="currentClient.contacts || []" border stripe size="small">
-        <el-table-column prop="name" label="姓名" min-width="100" />
-        <el-table-column prop="phone" label="手机号码" min-width="140" />
-        <el-table-column label="操作" width="80" align="center">
+        <el-table-column prop="name" label="姓名" min-width="80" />
+        <el-table-column prop="phone" label="手机号码" min-width="120" />
+        <el-table-column prop="wx_userid" label="企业微信ID" min-width="140">
           <template #default="{ row }">
+            <span v-if="row.wx_userid">{{ row.wx_userid }}</span>
+            <span v-else style="color:#c0c4cc">未配置</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="类型" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.wx_userid && row.wx_userid.startsWith('wm')" type="warning" size="small">外部</el-tag>
+            <el-tag v-else-if="row.wx_userid" type="success" size="small">内部</el-tag>
+            <span v-else style="color:#c0c4cc">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="wx_sender" label="发送人" min-width="100">
+          <template #default="{ row }">
+            <span v-if="row.wx_sender">{{ row.wx_sender }}</span>
+            <span v-else style="color:#c0c4cc">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" align="center">
+          <template #default="{ row }">
+            <el-button type="primary" size="small" @click="editContact(row)">编辑</el-button>
             <el-popconfirm title="确认删除?" @confirm="deleteContact(row.id)">
               <template #reference>
                 <el-button type="danger" size="small">删除</el-button>
@@ -69,13 +95,33 @@
       </el-table>
 
       <!-- Add Contact Inline Form -->
-      <el-dialog v-model="contactFormVisible" title="添加联系人" width="400px" append-to-body>
-        <el-form :model="contactForm" label-width="80px">
+      <el-dialog v-model="contactFormVisible" :title="contactForm.id ? '编辑联系人' : '添加联系人'" width="500px" append-to-body>
+        <el-form :model="contactForm" label-width="100px">
           <el-form-item label="姓名">
             <el-input v-model="contactForm.name" />
           </el-form-item>
           <el-form-item label="手机号码">
             <el-input v-model="contactForm.phone" />
+          </el-form-item>
+          <el-form-item label="发送人账号">
+            <el-input v-model="contactForm.wx_sender" placeholder="你的企业微信账号（内部员工）" />
+            <div style="color:#909399;font-size:12px;margin-top:4px">填入后可自动获取你的外部联系人列表</div>
+          </el-form-item>
+          <el-form-item label="企业微信ID">
+            <div style="display:flex;gap:8px;width:100%">
+              <el-input v-model="contactForm.wx_userid" placeholder="外部联系人ID（wm开头）" style="flex:1" />
+              <el-button type="primary" :loading="fetchingContacts" @click="fetchExternalContacts" :disabled="!contactForm.wx_sender">获取</el-button>
+            </div>
+          </el-form-item>
+          <!-- 外部联系人选择列表 -->
+          <el-form-item v-if="externalContacts.length > 0" label="选择客户">
+            <el-select v-model="contactForm.wx_userid" filterable placeholder="从外部联系人中选择" style="width:100%" @change="onExternalContactSelect">
+              <el-option v-for="c in externalContacts" :key="c.external_userid" :label="`${c.name} (${c.corp_name || '个人'})`" :value="c.external_userid">
+                <span>{{ c.name }}</span>
+                <span v-if="c.corp_name" style="color:#909399;margin-left:8px">{{ c.corp_name }}</span>
+                <span style="color:#c0c4cc;margin-left:8px;font-size:12px">{{ c.external_userid }}</span>
+              </el-option>
+            </el-select>
           </el-form-item>
         </el-form>
         <template #footer>
@@ -102,6 +148,8 @@ const contactsVisible = ref(false)
 const currentClient = ref({ id: null, name: '', contacts: [] })
 const contactFormVisible = ref(false)
 const contactForm = ref({ name: '', phone: '' })
+const externalContacts = ref([])
+const fetchingContacts = ref(false)
 
 const loadData = async () => {
   try { const res = await api.get('/clients'); clients.value = res.data } catch (e) {}
@@ -130,17 +178,56 @@ const showContacts = (row) => {
 }
 
 const showAddContact = () => {
-  contactForm.value = { name: '', phone: '' }
+  contactForm.value = { name: '', phone: '', wx_userid: '', wx_sender: '' }
+  externalContacts.value = []
   contactFormVisible.value = true
+}
+
+const editContact = (row) => {
+  contactForm.value = { id: row.id, name: row.name, phone: row.phone, wx_userid: row.wx_userid || '', wx_sender: row.wx_sender || '' }
+  externalContacts.value = []
+  contactFormVisible.value = true
+}
+
+const fetchExternalContacts = async () => {
+  if (!contactForm.value.wx_sender) {
+    ElMessage.warning('请先填写发送人账号')
+    return
+  }
+  fetchingContacts.value = true
+  try {
+    const res = await api.get(`/wx-external-contacts?sender=${contactForm.value.wx_sender}`)
+    if (res.code === 200) {
+      externalContacts.value = res.data || []
+      if (externalContacts.value.length === 0) {
+        ElMessage.info('未找到外部联系人')
+      }
+    }
+  } catch (e) {
+    ElMessage.error('获取外部联系人失败')
+  } finally {
+    fetchingContacts.value = false
+  }
+}
+
+const onExternalContactSelect = (val) => {
+  const selected = externalContacts.value.find(c => c.external_userid === val)
+  if (selected) {
+    contactForm.value.name = selected.name
+    contactForm.value.external_corp_name = selected.corp_name || ''
+  }
 }
 
 const submitContact = async () => {
   if (!contactForm.value.name) { ElMessage.warning('请输入联系人姓名'); return }
   try {
-    await api.post(`/clients/${currentClient.value.id}/contacts`, contactForm.value)
-    ElMessage.success('添加成功')
+    if (contactForm.value.id) {
+      await api.put(`/clients/${currentClient.value.id}/contacts/${contactForm.value.id}`, contactForm.value)
+    } else {
+      await api.post(`/clients/${currentClient.value.id}/contacts`, contactForm.value)
+    }
+    ElMessage.success('操作成功')
     contactFormVisible.value = false
-    // Reload contacts
     const res = await api.get(`/clients/${currentClient.value.id}`)
     currentClient.value = res.data
     loadData()

@@ -1,14 +1,25 @@
 <template>
   <div>
-    <el-card>
+    <el-card class="page-card">
       <template #header>
-        <span style="font-size:18px;font-weight:bold">报表管理</span>
+        <div class="page-header">
+          <div class="page-title">
+            <el-icon :size="20"><DataAnalysis /></el-icon>
+            <span>报表管理</span>
+          </div>
+        </div>
       </template>
 
       <el-tabs v-model="activeTab">
         <!-- 按用车单位查询 -->
         <el-tab-pane label="按用车单位查询" name="client">
           <el-form :inline="true" style="margin-bottom:15px">
+            <el-form-item label="包车类型">
+              <el-select v-model="clientQuery.client_type" placeholder="全部" clearable style="width:120px">
+                <el-option label="个人包车" value="personal" />
+                <el-option label="单位包车" value="company" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="用车单位">
               <el-input v-model="clientQuery.client" placeholder="输入单位名称" clearable />
             </el-form-item>
@@ -37,7 +48,27 @@
 
           <el-table :data="clientTasks" border stripe max-height="400">
             <el-table-column type="index" label="序号" width="60" align="center" />
-            <el-table-column prop="client_name" label="用车单位" min-width="120" />
+            <el-table-column label="包车类型" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.client_type === 'company' ? 'primary' : 'success'" size="small">
+                  {{ row.client_type === 'company' ? '单位' : '个人' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="用车单位" min-width="120">
+              <template #default="{ row }">
+                {{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="contact_name" label="联系人" width="90" />
+            <el-table-column label="确认情况" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
+                <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
+                <el-tag v-else-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
+                <span v-else style="color:#c0c4cc">-</span>
+              </template>
+            </el-table-column>
             <el-table-column prop="departure" label="出发地点" min-width="100" />
             <el-table-column prop="destination" label="目的地" min-width="100" />
             <el-table-column prop="vehicle_plate" label="车牌号" min-width="100" />
@@ -63,6 +94,12 @@
         <!-- 按司机查询 -->
         <el-tab-pane label="按司机查询" name="driver">
           <el-form :inline="true" style="margin-bottom:15px">
+            <el-form-item label="包车类型">
+              <el-select v-model="driverQuery.client_type" placeholder="全部" clearable style="width:120px">
+                <el-option label="个人包车" value="personal" />
+                <el-option label="单位包车" value="company" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="司机">
               <el-select v-model="driverQuery.driver_id" placeholder="选择司机" clearable style="width:200px">
                 <el-option v-for="d in allDrivers" :key="d.id" :label="d.name + ' (' + d.phone + ')'" :value="d.id" />
@@ -91,7 +128,27 @@
             </el-descriptions>
             <el-table :data="ds.tasks" border stripe size="small">
               <el-table-column type="index" label="序号" width="60" align="center" />
-              <el-table-column prop="client_name" label="用车单位" min-width="120" />
+              <el-table-column label="包车类型" width="90" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="row.client_type === 'company' ? 'primary' : 'success'" size="small">
+                    {{ row.client_type === 'company' ? '单位' : '个人' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="用车单位" min-width="120">
+                <template #default="{ row }">
+                  {{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="contact_name" label="联系人" width="90" />
+              <el-table-column label="确认情况" width="90" align="center">
+                <template #default="{ row }">
+                  <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
+                  <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
+                  <el-tag v-else-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
+                  <span v-else style="color:#c0c4cc">-</span>
+                </template>
+              </el-table-column>
               <el-table-column prop="departure" label="出发" min-width="80" />
               <el-table-column prop="destination" label="目的" min-width="80" />
               <el-table-column prop="departure_time" label="出车时间" min-width="150" />
@@ -104,6 +161,12 @@
         <!-- 按车辆查询 -->
         <el-tab-pane label="按车辆查询" name="vehicle">
           <el-form :inline="true" style="margin-bottom:15px">
+            <el-form-item label="包车类型">
+              <el-select v-model="vehicleQuery.client_type" placeholder="全部" clearable style="width:120px">
+                <el-option label="个人包车" value="personal" />
+                <el-option label="单位包车" value="company" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="车辆">
               <el-select v-model="vehicleQuery.vehicle_id" placeholder="选择车辆" clearable style="width:200px">
                 <el-option v-for="v in allVehicles" :key="v.id" :label="v.plate_number + ' (' + v.vehicle_type + ')'" :value="v.id" />
@@ -134,10 +197,30 @@
             </el-descriptions>
             <el-table :data="vs.tasks" border stripe size="small">
               <el-table-column type="index" label="序号" width="60" align="center" />
-              <el-table-column prop="client_name" label="用车单位" min-width="120" />
+              <el-table-column label="包车类型" width="90" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="row.client_type === 'company' ? 'primary' : 'success'" size="small">
+                    {{ row.client_type === 'company' ? '单位' : '个人' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="用车单位" min-width="120">
+                <template #default="{ row }">
+                  {{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="contact_name" label="联系人" width="90" />
+              <el-table-column label="确认情况" width="90" align="center">
+                <template #default="{ row }">
+                  <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
+                  <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
+                  <el-tag v-else-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
+                  <span v-else style="color:#c0c4cc">-</span>
+                </template>
+              </el-table-column>
               <el-table-column prop="departure" label="出发" min-width="80" />
               <el-table-column prop="destination" label="目的" min-width="80" />
-              <el-table-column prop="departure_time" label="出车时间" min-width="150" />
+              <el-table-column prop="departure_time" label="出车时间" min-width="155" />
               <el-table-column prop="rental_fee" label="租车费" width="100" align="right" />
               <el-table-column prop="actual_cost" label="实际成本" width="100" align="right" />
               <el-table-column prop="final_profit" label="最终利润" width="100" align="right">
@@ -160,20 +243,21 @@ import api from '../utils/api'
 
 const activeTab = ref('client')
 
-const clientQuery = ref({ client: '', month: '', year: '', dateRange: null })
+const clientQuery = ref({ client: '', client_type: '', month: '', year: '', dateRange: null })
 const clientTasks = ref([])
 const clientSummary = ref(null)
 
-const driverQuery = ref({ driver_id: null, month: '', year: '', dateRange: null })
+const driverQuery = ref({ driver_id: null, client_type: '', month: '', year: '', dateRange: null })
 const driverResults = ref([])
 const allDrivers = ref([])
 
-const vehicleQuery = ref({ vehicle_id: null, month: '', year: '', dateRange: null })
+const vehicleQuery = ref({ vehicle_id: null, client_type: '', month: '', year: '', dateRange: null })
 const vehicleResults = ref([])
 const allVehicles = ref([])
 
 const queryByClient = async () => {
   const params = { client: clientQuery.value.client }
+  if (clientQuery.value.client_type) params.client_type = clientQuery.value.client_type
   if (clientQuery.value.month) params.month = clientQuery.value.month
   if (clientQuery.value.year) params.year = clientQuery.value.year
   if (clientQuery.value.dateRange) {
@@ -190,6 +274,7 @@ const queryByClient = async () => {
 const queryByDriver = async () => {
   const params = {}
   if (driverQuery.value.driver_id) params.driver_id = driverQuery.value.driver_id
+  if (driverQuery.value.client_type) params.client_type = driverQuery.value.client_type
   if (driverQuery.value.month) params.month = driverQuery.value.month
   if (driverQuery.value.year) params.year = driverQuery.value.year
   if (driverQuery.value.dateRange) {
@@ -205,6 +290,7 @@ const queryByDriver = async () => {
 const queryByVehicle = async () => {
   const params = {}
   if (vehicleQuery.value.vehicle_id) params.vehicle_id = vehicleQuery.value.vehicle_id
+  if (vehicleQuery.value.client_type) params.client_type = vehicleQuery.value.client_type
   if (vehicleQuery.value.month) params.month = vehicleQuery.value.month
   if (vehicleQuery.value.year) params.year = vehicleQuery.value.year
   if (vehicleQuery.value.dateRange) {

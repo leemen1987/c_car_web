@@ -1,18 +1,59 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, redirect
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
-from models import db, User, Driver, Vehicle, Task, LocationLaborRate, Client, ClientContact
+from models import db, User, Driver, Vehicle, Task, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 from functools import wraps
 import json
 import time
 import uuid
+import hashlib
+import base64
 import urllib.request
 import urllib.parse
 import urllib.error
+from utils.wx_work import WxWorkClient, format_confirm_message, format_external_confirm_message, get_userinfo_by_code, get_user_detail
+
+def decrypt_yzj_callback(encrypted_data, developer_key):
+    """
+    解密云之家回调数据
+    encrypted_data: Base64编码的加密数据
+    developer_key: 开发者key（16位字符）
+    返回解密后的JSON数据
+
+    根据云之家JAVA DEMO，使用 AES/ECB/PKCS5Padding 模式
+    """
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    try:
+        # AES密钥 = 开发者key的UTF-8字节
+        aes_key = developer_key.encode('utf-8')
+
+        # Base64解码
+        encrypted_bytes = base64.b64decode(encrypted_data)
+
+        # AES-ECB解密（云之家JAVA DEMO使用的是AES默认模式，即ECB）
+        cipher = Cipher(algorithms.AES(aes_key), modes.ECB())
+        decryptor = cipher.decryptor()
+        decrypted = decryptor.update(encrypted_bytes) + decryptor.finalize()
+
+        # 去除PKCS7 padding
+        pad_len = decrypted[-1]
+        if 1 <= pad_len <= 16:
+            decrypted = decrypted[:-pad_len]
+
+        # 解析为JSON
+        text = decrypted.decode('utf-8')
+        return json.loads(text)
+
+    except Exception as e:
+        app.logger.error(f"解密云之家回调数据失败: {e}")
+        return None
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.config.from_object(Config)
 CORS(app, supports_credentials=True)
 db.init_app(app)
@@ -330,10 +371,29 @@ def add_contact(client_id):
     if not client:
         return jsonify({'code': 404, 'msg': '单位不存在'})
     data = request.get_json()
-    contact = ClientContact(client_id=client_id, name=data.get('name', ''), phone=data.get('phone', ''))
+    contact = ClientContact(client_id=client_id, name=data.get('name', ''), phone=data.get('phone', ''), wx_userid=data.get('wx_userid', ''), wx_sender=data.get('wx_sender', ''))
     db.session.add(contact)
     db.session.commit()
     return jsonify({'code': 200, 'msg': '添加成功', 'data': contact.to_dict()})
+
+
+@app.route('/api/clients/<int:client_id>/contacts/<int:contact_id>', methods=['PUT'])
+@login_required
+def update_contact(client_id, contact_id):
+    contact = ClientContact.query.filter_by(id=contact_id, client_id=client_id).first()
+    if not contact:
+        return jsonify({'code': 404, 'msg': '联系人不存在'})
+    data = request.get_json()
+    if 'name' in data:
+        contact.name = data['name']
+    if 'phone' in data:
+        contact.phone = data['phone']
+    if 'wx_userid' in data:
+        contact.wx_userid = data['wx_userid']
+    if 'wx_sender' in data:
+        contact.wx_sender = data['wx_sender']
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '更新成功', 'data': contact.to_dict()})
 
 
 @app.route('/api/clients/<int:client_id>/contacts/<int:contact_id>', methods=['DELETE'])
@@ -508,6 +568,11 @@ def delete_task(task_id):
     task = Task.query.get(task_id)
     if not task:
         return jsonify({'code': 404, 'msg': '任务不存在'})
+    # 先删除关联的确认记录和快照
+    confirmations = ScheduleConfirmation.query.filter_by(task_id=task_id).all()
+    for conf in confirmations:
+        ConfirmationSnapshot.query.filter_by(confirmation_id=conf.id).delete()
+    ScheduleConfirmation.query.filter_by(task_id=task_id).delete()
     db.session.delete(task)
     db.session.commit()
     return jsonify({'code': 200, 'msg': '删除成功'})
@@ -699,15 +764,16 @@ def get_yunzhijia_token(force_refresh=False):
     return token
 
 
-def build_yzj_approval_body(task):
+def build_yzj_approval_body(task, row_id=1):
     """将一条包车任务转换为云之家审批明细行"""
-    client_display = task.client_name or ''
     if task.client_type == 'company':
+        client_display = (task.client.name if task.client else task.client_name) or ''
+    else:
         client_display = task.client_name or ''
     contact_display = f"{task.client_name} {task.client_phone}".strip() if task.client_name else ''
 
     return {
-        '_id_': str(int(time.time() * 1000)),
+        '_id_': str(row_id),
         'Te_0': client_display,       # 用车方
         'Te_1': contact_display,      # 联系人
         'Te_2': task.departure or '',          # 出发地点
@@ -716,15 +782,15 @@ def build_yzj_approval_body(task):
         'Te_5': task.driver.name if task.driver else '',            # 驾驶司机
         'Te_6': task.departure_time.strftime('%Y-%m-%d %H:%M') if task.departure_time else '',  # 出车时间
         'Te_7': task.return_time.strftime('%Y-%m-%d %H:%M') if task.return_time else '',        # 回程时间
-        'Te_8': str(task.rental_days) if task.rental_days else '',  # 天数
-        'Te_9': task.vehicle_type or '',        # 车辆类型
-        'Te_10': str(task.mileage) if task.mileage else '',  # 里程
-        'Te_11': str(task.rental_fee) if task.rental_fee else '',  # 租车费
-        'Te_12': str(task.fuel_fee) if task.fuel_fee else '',     # 油电费
-        'Te_13': str(task.bridge_fee) if task.bridge_fee else '', # 桥路费
-        'Te_14': str(task.labor_fee) if task.labor_fee else '',   # 司机人工费
-        'Te_15': str(task.estimated_cost) if task.estimated_cost else '',   # 预计成本
-        'Te_16': str(task.estimated_profit) if task.estimated_profit else '', # 预估利润
+        'Te_8': task.vehicle_type or '',        # 车辆类型
+        'Te_9': str(task.mileage) if task.mileage else '',  # 里程
+        'Te_10': str(task.rental_fee) if task.rental_fee else '',  # 租车费
+        'Te_11': str(task.fuel_fee) if task.fuel_fee else '',     # 油电费
+        'Te_12': str(task.bridge_fee) if task.bridge_fee else '', # 桥路费
+        'Te_13': str(task.labor_fee) if task.labor_fee else '',   # 司机人工费
+        'Te_14': str(task.estimated_cost) if task.estimated_cost else '',   # 预计成本
+        'Te_15': str(task.estimated_profit) if task.estimated_profit else '', # 预估利润
+        'Te_16': str(task.rental_days) if task.rental_days else '',  # 天数
     }
 
 
@@ -785,13 +851,14 @@ def submit_approval():
         names = [f"ID{t.id}({t.departure}→{t.destination})" for t in past_tasks]
         return jsonify({'code': 400, 'msg': f'以下任务已过出车时间，禁止发起审批：{", ".join(names)}'})
 
-    # 过滤掉已发起过审批的任务
-    already = [t for t in eligible if getattr(t, 'yzj_approval_status', '') == 'submitted']
+    # 过滤掉已发起或已通过审批的任务（已拒绝/已撤销可重新发起）
+    blocked_status = {'submitted', 'approved'}
+    already = [t for t in eligible if getattr(t, 'yzj_approval_status', '') in blocked_status]
     if already:
         eligible = [t for t in eligible if t not in already]
 
     if not eligible:
-        return jsonify({'code': 400, 'msg': '所选任务均已发起过审批'})
+        return jsonify({'code': 400, 'msg': '所选任务均已发起过审批或已通过，无法重复提交'})
 
     # 按车辆所属公司分组
     grouped = {}
@@ -810,7 +877,7 @@ def submit_approval():
         else:
             title = f"包车审批 - {first.departure}→{first.destination} 等{len(group_tasks)}条"
 
-        detail_rows = [build_yzj_approval_body(t) for t in group_tasks]
+        detail_rows = [build_yzj_approval_body(t, idx) for idx, t in enumerate(group_tasks, start=1)]
 
         try:
             token = get_yunzhijia_token()
@@ -890,7 +957,7 @@ def submit_approval():
     })
 
 
-@app.route('/api/yunzhijia/callback', methods=['POST'])
+@app.route('/api/yunzhijia/callback', methods=['GET', 'POST'])
 def yunzhijia_callback():
     """
     云之家审批回调接口。
@@ -899,51 +966,123 @@ def yunzhijia_callback():
     需在云之家开发者后台配置回调地址：
         https://你的域名/api/yunzhijia/callback
 
-    回调 body 示例（以实际云之家文档为准）：
-    {
-        "flowInstId": "xxx",
-        "formInstId": "xxx",
-        "formCodeId": "xxx",
-        "actionType": "agree" / "reject" / "revoke",
-        "nodeName": "节点名称",
-        ...
-    }
+    云之家回调数据是加密的，需要配置 Token 和 EncodingAESKey 进行解密。
     """
-    data = request.get_json(force=True, silent=True) or {}
-    app.logger.info(f"云之家回调: {json.dumps(data, ensure_ascii=False)[:500]}")
+    # GET 请求 - 可能是云之家的验证请求
+    if request.method == 'GET':
+        app.logger.info(f"云之家回调(GET): args={dict(request.args)}")
+        # 返回成功，云之家可能需要验证接口可用性
+        return jsonify({'code': 200, 'msg': 'ok'})
 
-    flow_inst_id = data.get('flowInstId', '')
-    form_inst_id = data.get('formInstId', '')
-    action_type = data.get('actionType', '')
+    # POST 请求 - 审批状态变更通知
+    raw_data = request.get_data(as_text=True)
 
-    if not flow_inst_id and not form_inst_id:
-        return jsonify({'code': 400, 'msg': '缺少flowInstId或formInstId'})
+    # 尝试解密数据
+    data = {}
+    aes_key = app.config.get('YUNZHIJIA_CALLBACK_AES_KEY', '')
 
-    # 根据 flowInstId 或 formInstId 查找关联的任务
-    tasks = Task.query.filter(
-        (Task.yzj_flow_inst_id == flow_inst_id) | (Task.yzj_form_inst_id == form_inst_id)
-    ).all()
+    if aes_key and raw_data:
+        try:
+            # 尝试解析JSON获取加密数据
+            json_data = json.loads(raw_data)
+            encrypted_content = json_data.get('content', '') or json_data.get('data', '')
+            if encrypted_content:
+                data = decrypt_yzj_callback(encrypted_content, aes_key) or {}
+        except json.JSONDecodeError:
+            # 如果不是JSON，可能是直接的加密字符串
+            data = decrypt_yzj_callback(raw_data, aes_key) or {}
+        except Exception as e:
+            app.logger.error(f"云之 decryption failed: {e}")
+
+    # 如果解密失败，尝试直接解析
+    if not data:
+        try:
+            data = json.loads(raw_data) if raw_data else {}
+        except:
+            data = {}
+    if not data:
+        data = dict(request.args)
+
+    # 提取字段
+    flow_inst_id = data.get('flowInstId', '') or data.get('flow_inst_id', '')
+    form_inst_id = data.get('formInstId', '') or data.get('form_inst_id', '')
+    action_type = data.get('actionType', '') or data.get('action_type', '') or data.get('action', '')
+
+    # 如果顶层没有，尝试从data子对象获取
+    if isinstance(data.get('data'), dict):
+        inner = data['data']
+        flow_inst_id = flow_inst_id or inner.get('flowInstId', '') or inner.get('flow_inst_id', '')
+        form_inst_id = form_inst_id or inner.get('formInstId', '') or inner.get('form_inst_id', '')
+        action_type = action_type or inner.get('actionType', '') or inner.get('action_type', '') or inner.get('action', '')
+
+    # 从表单数据中提取流水号（云之家大众回调只发送表单数据，需要通过流水号匹配任务）
+    serial_number = ''
+    if isinstance(data.get('data'), dict):
+        form_info = data['data'].get('formInfo', {})
+        widget_map = form_info.get('widgetMap', {})
+        serial_widget = widget_map.get('_S_SERIAL', {})
+        serial_number = serial_widget.get('value', '')
+
+    app.logger.info(f"云之家回调: serial={serial_number}, flowInstId={flow_inst_id}")
+
+    # 查找关联任务
+    tasks = []
+    if flow_inst_id or form_inst_id:
+        tasks = Task.query.filter(
+            (Task.yzj_flow_inst_id == flow_inst_id) | (Task.yzj_form_inst_id == form_inst_id)
+        ).all()
+    elif serial_number:
+        tasks = Task.query.filter(Task.yzj_serial == serial_number).all()
 
     if not tasks:
-        app.logger.warning(f"回调未找到关联任务: flowInstId={flow_inst_id}")
+        app.logger.warning(f"云之家回调未找到关联任务: serial={serial_number}")
         return jsonify({'code': 200, 'msg': '无关联任务'})
 
-    # 更新审批状态
-    status_map = {
-        'agree': 'approved',
-        'approved': 'approved',
-        'reject': 'rejected',
-        'rejected': 'rejected',
-        'revoke': '',        # 撤销则清空状态，允许重新发起
-        'revokeAll': '',
-    }
-    new_status = status_map.get(action_type, '')
+    # 查询审批状态（通过云之家API）
+    flow_inst_id_to_query = tasks[0].yzj_flow_inst_id
+    if flow_inst_id_to_query:
+        try:
+            token = get_yunzhijia_token()
+            query_url = (
+                f"{app.config['YUNZHIJIA_HOST']}"
+                f"/gateway/workflow/form/thirdpart/getFlowStatus"
+                f"?accessToken={token}"
+            )
+            query_body = json.dumps({'flowInstId': flow_inst_id_to_query}, ensure_ascii=False).encode('utf-8')
+            req = urllib.request.Request(
+                query_url, data=query_body, method='POST',
+                headers={'Content-Type': 'application/json; charset=utf-8', 'User-Agent': 'charter-bus/1.0'},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read().decode('utf-8'))
 
-    for t in tasks:
-        t.yzj_approval_status = new_status
-    db.session.commit()
+                # 解析审批状态
+                if result.get('errorCode') == 0:
+                    flow_data = result.get('data', {})
+                    # data可能是字符串(如"FINISH")或对象
+                    if isinstance(flow_data, str):
+                        flow_status = flow_data
+                    else:
+                        flow_status = flow_data.get('flowStatus', '') if isinstance(flow_data, dict) else ''
 
-    app.logger.info(f"已更新 {len(tasks)} 条任务审批状态为: {new_status or '(已撤销)'}")
+                    # 更新任务状态
+                    status_map = {
+                        'FINISH': 'approved',
+                        'agree': 'approved',
+                        'completed': 'approved',
+                        'reject': 'rejected',
+                        'revoke': '',
+                    }
+                    new_status = status_map.get(flow_status, '')
+                    for t in tasks:
+                        t.yzj_approval_status = new_status
+                    db.session.commit()
+                    app.logger.info(f"已更新 {len(tasks)} 条任务审批状态: {serial_number} -> {new_status or flow_status}")
+                else:
+                    app.logger.warning(f"查询审批状态失败: {result.get('error', 'unknown')}")
+        except Exception as e:
+            app.logger.error(f"查询审批状态异常: {e}")
+
     return jsonify({'code': 200, 'msg': 'ok'})
 
 
@@ -953,12 +1092,15 @@ def yunzhijia_callback():
 @login_required
 def report_by_client():
     client = request.args.get('client', '')
+    client_type = request.args.get('client_type', '')
     month = request.args.get('month', '')
     year = request.args.get('year', '')
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
 
     query = Task.query
+    if client_type:
+        query = query.filter(Task.client_type == client_type)
     if client:
         query = query.filter(Task.client_name.like(f'%{client}%'))
     if month:
@@ -995,12 +1137,15 @@ def report_by_client():
 @login_required
 def report_by_driver():
     driver_id = request.args.get('driver_id', type=int)
+    client_type = request.args.get('client_type', '')
     month = request.args.get('month', '')
     year = request.args.get('year', '')
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
 
     query = Task.query.filter(Task.driver_id.isnot(None))
+    if client_type:
+        query = query.filter(Task.client_type == client_type)
     if driver_id:
         query = query.filter(Task.driver_id == driver_id)
     if month:
@@ -1042,12 +1187,15 @@ def report_by_driver():
 @login_required
 def report_by_vehicle():
     vehicle_id = request.args.get('vehicle_id', type=int)
+    client_type = request.args.get('client_type', '')
     month = request.args.get('month', '')
     year = request.args.get('year', '')
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
 
     query = Task.query.filter(Task.vehicle_id.isnot(None))
+    if client_type:
+        query = query.filter(Task.client_type == client_type)
     if vehicle_id:
         query = query.filter(Task.vehicle_id == vehicle_id)
     if month:
@@ -1086,6 +1234,521 @@ def report_by_vehicle():
     })
 
 
+# ==================== 企业微信外部联系人 ====================
+
+@app.route('/api/wx-external-contacts', methods=['GET'])
+@login_required
+def get_wx_external_contacts():
+    """获取企业微信外部联系人列表"""
+    sender = request.args.get('sender', '') or app.config.get('WX_WORK_SENDER', '')
+    if not sender:
+        return jsonify({'code': 400, 'msg': '请指定发送人（sender）账号'})
+
+    wx_client = get_wx_work_client()
+    result = wx_client.get_external_contacts(sender)
+
+    if not result.get('success'):
+        return jsonify({'code': 500, 'msg': result.get('errmsg', '获取失败')})
+
+    # 获取每个外部联系人的详情
+    contacts = []
+    for ext_id in result.get('external_userid', []):
+        detail = wx_client.get_external_contact_detail(ext_id)
+        if detail.get('success'):
+            contacts.append({
+                'external_userid': detail.get('external_userid', ''),
+                'name': detail.get('name', ''),
+                'corp_name': detail.get('corp_name', ''),
+            })
+        else:
+            contacts.append({
+                'external_userid': ext_id,
+                'name': ext_id,
+                'corp_name': '',
+            })
+
+    return jsonify({'code': 200, 'data': contacts})
+
+
+# ==================== 排班确认 ====================
+
+def get_wx_work_client():
+    """获取企业微信客户端"""
+    return WxWorkClient(
+        corp_id=app.config.get('WX_WORK_CORP_ID', ''),
+        agent_id=app.config.get('WX_WORK_AGENT_ID', ''),
+        secret=app.config.get('WX_WORK_SECRET', '')
+    )
+
+
+@app.route('/api/task/<int:task_id>/push-confirm', methods=['POST'])
+@login_required
+def push_schedule_confirm(task_id):
+    """推送排班确认消息给客户"""
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'code': 404, 'msg': '任务不存在'})
+
+    # 检查任务状态
+    if task.status not in ('scheduled', 'pending'):
+        return jsonify({'code': 400, 'msg': '任务状态不允许推送确认'})
+
+    # 检查是否已有待确认的记录
+    existing = ScheduleConfirmation.query.filter_by(
+        task_id=task_id,
+        confirm_status='pending'
+    ).first()
+    if existing:
+        return jsonify({'code': 400, 'msg': '该任务已有待确认的记录'})
+
+    data = request.get_json() or {}
+    wx_userid = data.get('wx_userid', '')
+    custom_message = data.get('custom_message', '')
+
+    # 获取联系人名称（优先使用联系人姓名，其次客户名称）
+    contact_name = task.client_name
+    contact_phone = task.client_phone
+    if task.contact_id:
+        contact = ClientContact.query.get(task.contact_id)
+        if contact:
+            contact_name = contact.name
+            contact_phone = contact.phone or task.client_phone
+
+    # 生成确认Token
+    confirm_token = str(uuid.uuid4()).replace('-', '')
+
+    # 创建确认记录
+    confirmation = ScheduleConfirmation(
+        task_id=task_id,
+        customer_id=task.client_id,
+        customer_name=contact_name,
+        customer_phone=contact_phone,
+        contact_id=task.contact_id,
+        wx_userid=wx_userid,
+        wx_sender=data.get('sender', ''),
+        confirm_token=confirm_token,
+        confirm_status='pending',
+        push_time=datetime.now(),
+        push_status='pending',
+        created_by=session.get('user_id')
+    )
+    db.session.add(confirmation)
+    db.session.flush()  # 获取ID
+
+    # 保存任务快照
+    task_snapshot = {
+        'task_no': task.task_no or f'TASK-{task.id}' or '',
+        'client_name': contact_name,
+        'client_phone': contact_phone,
+        'departure': task.departure,
+        'destination': task.destination,
+        'departure_time': task.departure_time.strftime('%Y-%m-%d %H:%M') if task.departure_time else '',
+        'return_time': task.return_time.strftime('%Y-%m-%d %H:%M') if task.return_time else '',
+        'vehicle_type': task.vehicle_type or '',
+        'vehicle_plate': task.vehicle.plate_number if task.vehicle else '',
+        'driver_name': task.driver.name if task.driver else '',
+        'driver_phone': task.driver.phone if task.driver else '',
+        'rental_fee': task.rental_fee,
+        'rental_days': task.rental_days,
+    }
+    snapshot = ConfirmationSnapshot(
+        confirmation_id=confirmation.id,
+        snapshot_type='task',
+        snapshot_data=json.dumps(task_snapshot, ensure_ascii=False)
+    )
+    db.session.add(snapshot)
+
+    # 更新任务状态
+    task.schedule_confirm_status = 'pending'
+
+    # 尝试发送企业微信消息
+    confirm_page_url = f"{app.config.get('CONFIRM_BASE_URL', '')}/confirm/{confirm_token}"
+
+    # 判断是外部联系人还是内部员工
+    is_external = wx_userid.startswith('wm') if wx_userid else False
+
+    if is_external:
+        # 外部联系人：直接用确认页面链接，无需OAuth
+        confirm_url = confirm_page_url
+    else:
+        # 内部员工：使用OAuth2授权链接
+        oauth_redirect_uri = f"{app.config.get('CONFIRM_BASE_URL', '')}/api/wx-oauth/callback"
+        from utils.wx_work import get_oauth_url
+        confirm_url = get_oauth_url(
+            corp_id=app.config.get('WX_WORK_CORP_ID', ''),
+            agent_id=app.config.get('WX_WORK_AGENT_ID', ''),
+            redirect_uri=oauth_redirect_uri,
+            state=confirm_token
+        )
+
+    if wx_userid:
+        try:
+            wx_client = get_wx_work_client()
+
+            if is_external:
+                # 外部联系人：企业微信不支持直接发消息，需手动发送链接
+                confirmation.push_status = 'pending'
+                confirmation.push_error = '外部联系人需手动发送确认链接'
+            else:
+                # 内部员工：使用文本卡片消息
+                msg_info = format_confirm_message(task_snapshot, confirm_url)
+                result = wx_client.send_textcard_message(
+                    userid=wx_userid,
+                    title=msg_info['title'],
+                    description=msg_info['description'],
+                    url=msg_info['url'],
+                    btntxt=msg_info['btntxt']
+                )
+                if result.get('success'):
+                    confirmation.push_status = 'success'
+                    confirmation.msg_id = result.get('msgid', '')
+                else:
+                    confirmation.push_status = 'failed'
+                    confirmation.push_error = result.get('errmsg', '发送失败')
+        except Exception as e:
+            confirmation.push_status = 'failed'
+            confirmation.push_error = str(e)
+    else:
+        # 未配置企业微信用户ID，标记为待手动发送
+        confirmation.push_status = 'pending'
+        confirmation.push_error = '未配置企业微信用户ID，请手动发送确认链接'
+
+    db.session.commit()
+
+    return jsonify({
+        'code': 200,
+        'msg': '推送成功' if confirmation.push_status == 'success' else '已创建确认记录，请手动发送链接',
+        'data': {
+            'confirmation_id': confirmation.id,
+            'confirm_url': confirm_url,
+            'push_status': confirmation.push_status,
+            'push_error': confirmation.push_error
+        }
+    })
+
+
+@app.route('/api/confirmations/<int:confirmation_id>/repush', methods=['POST'])
+@login_required
+def repush_confirmation(confirmation_id):
+    """重新推送确认消息"""
+    confirmation = ScheduleConfirmation.query.get(confirmation_id)
+    if not confirmation:
+        return jsonify({'code': 404, 'msg': '确认记录不存在'})
+
+    if confirmation.confirm_status != 'pending':
+        return jsonify({'code': 400, 'msg': '该确认已完成，无法重新推送'})
+
+    data = request.get_json() or {}
+    wx_userid = data.get('wx_userid', '') or confirmation.wx_userid
+
+    if not wx_userid:
+        return jsonify({'code': 400, 'msg': '未配置企业微信用户ID，无法推送'})
+
+    # 自动获取 sender：请求参数 > 确认记录 > 联系人
+    sender = data.get('sender', '') or confirmation.wx_sender or ''
+    if not sender and confirmation.contact_id:
+        contact = ClientContact.query.get(confirmation.contact_id)
+        if contact:
+            sender = contact.wx_sender
+    if not sender and confirmation.customer_id:
+        contact = ClientContact.query.filter_by(client_id=confirmation.customer_id, wx_userid=wx_userid).first()
+        if contact:
+            sender = contact.wx_sender
+    if not sender:
+        sender = app.config.get('WX_WORK_SENDER', '')
+
+    # 获取任务快照
+    snapshot = ConfirmationSnapshot.query.filter_by(
+        confirmation_id=confirmation.id,
+        snapshot_type='task'
+    ).first()
+    task_snapshot = {}
+    if snapshot:
+        try:
+            task_snapshot = json.loads(snapshot.snapshot_data)
+        except:
+            pass
+
+    confirm_page_url = f"{app.config.get('CONFIRM_BASE_URL', '')}/confirm/{confirmation.confirm_token}"
+    is_external = wx_userid.startswith('wm') if wx_userid else False
+
+    if is_external:
+        confirm_url = confirm_page_url
+    else:
+        oauth_redirect_uri = f"{app.config.get('CONFIRM_BASE_URL', '')}/api/wx-oauth/callback"
+        from utils.wx_work import get_oauth_url
+        confirm_url = get_oauth_url(
+            corp_id=app.config.get('WX_WORK_CORP_ID', ''),
+            agent_id=app.config.get('WX_WORK_AGENT_ID', ''),
+            redirect_uri=oauth_redirect_uri,
+            state=confirmation.confirm_token
+        )
+
+    # 更新wx_userid
+    confirmation.wx_userid = wx_userid
+    confirmation.push_time = datetime.now()
+
+    try:
+        wx_client = get_wx_work_client()
+
+        if is_external:
+            # 外部联系人：企业微信不支持直接发消息，需手动发送链接
+            confirmation.push_status = 'pending'
+            confirmation.push_error = '外部联系人需手动发送确认链接'
+        else:
+            msg_info = format_confirm_message(task_snapshot, confirm_url)
+            result = wx_client.send_textcard_message(
+                userid=wx_userid,
+                title=msg_info['title'],
+                description=msg_info['description'],
+                url=msg_info['url'],
+                btntxt=msg_info['btntxt']
+            )
+            if result.get('success'):
+                confirmation.push_status = 'success'
+                confirmation.msg_id = result.get('msgid', '')
+                confirmation.push_error = ''
+            else:
+                confirmation.push_status = 'failed'
+                confirmation.push_error = result.get('errmsg', '发送失败')
+    except Exception as e:
+        confirmation.push_status = 'failed'
+        confirmation.push_error = str(e)
+
+    db.session.commit()
+
+    msg = '推送成功'
+    if confirmation.push_status == 'pending' and is_external:
+        msg = '确认链接已生成，请复制发送给客户'
+    elif confirmation.push_status == 'failed':
+        msg = '推送失败: ' + confirmation.push_error
+
+    return jsonify({
+        'code': 200,
+        'msg': msg,
+        'data': {
+            'push_status': confirmation.push_status,
+            'push_error': confirmation.push_error,
+            'confirm_url': confirm_url if is_external else ''
+        }
+    })
+
+
+@app.route('/api/confirm/<token>', methods=['GET'])
+def get_confirm_page(token):
+    """获取确认页面数据（无需登录）"""
+    confirmation = ScheduleConfirmation.query.filter_by(confirm_token=token).first()
+
+    if not confirmation:
+        return jsonify({'code': 404, 'msg': '确认链接无效'})
+
+    # 获取任务快照
+    snapshot = ConfirmationSnapshot.query.filter_by(
+        confirmation_id=confirmation.id,
+        snapshot_type='task'
+    ).first()
+
+    task_info = {}
+    if snapshot:
+        try:
+            task_info = json.loads(snapshot.snapshot_data)
+        except:
+            pass
+
+    return jsonify({
+        'code': 200,
+        'data': {
+            'task_info': task_info,
+            'confirm_status': confirmation.confirm_status,
+            'push_time': confirmation.push_time.strftime('%Y-%m-%d %H:%M:%S') if confirmation.push_time else None,
+            'confirm_time': confirmation.confirm_time.strftime('%Y-%m-%d %H:%M:%S') if confirmation.confirm_time else None,
+            'created_by_name': confirmation.creator.username if confirmation.creator else None,
+            'customer_name': confirmation.customer_name,
+        }
+    })
+
+
+@app.route('/api/confirm/<token>', methods=['POST'])
+def submit_confirm(token):
+    """提交确认结果（无需登录）"""
+    confirmation = ScheduleConfirmation.query.filter_by(confirm_token=token).first()
+
+    if not confirmation:
+        return jsonify({'code': 404, 'msg': '确认链接无效'})
+
+    if confirmation.confirm_status != 'pending':
+        return jsonify({'code': 400, 'msg': '该确认已完成，请勿重复操作'})
+
+    data = request.get_json() or {}
+    action = data.get('action', 'confirm')
+    remark = data.get('remark', '')
+    phone = data.get('phone', '')
+
+    # 更新确认记录
+    confirmation.confirm_time = datetime.now()
+    confirmation.confirm_ip = request.remote_addr or ''
+    confirmation.confirm_device = request.headers.get('User-Agent', '')[:500]
+    confirmation.confirm_remark = remark
+    if phone:
+        confirmation.customer_phone = phone
+
+    if action == 'reject':
+        confirmation.confirm_status = 'rejected'
+        # 更新任务状态
+        task = Task.query.get(confirmation.task_id)
+        if task:
+            task.schedule_confirm_status = 'rejected'
+    else:
+        confirmation.confirm_status = 'confirmed'
+        # 更新任务状态
+        task = Task.query.get(confirmation.task_id)
+        if task:
+            task.schedule_confirm_status = 'confirmed'
+
+    db.session.commit()
+
+    return jsonify({
+        'code': 200,
+        'msg': '确认成功' if action == 'confirm' else '已提交异议',
+        'data': {
+            'confirm_time': confirmation.confirm_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'confirm_status': confirmation.confirm_status
+        }
+    })
+
+
+@app.route('/api/wx-oauth/callback', methods=['GET'])
+def wx_oauth_callback():
+    """企业微信OAuth2回调，获取用户信息"""
+    code = request.args.get('code', '')
+    state = request.args.get('state', '')  # 这里传递的是confirm_token
+
+    if not code or not state:
+        return jsonify({'code': 400, 'msg': '参数错误'})
+
+    # 通过code获取用户信息
+    wx_client = get_wx_work_client()
+    user_result = get_userinfo_by_code(wx_client, code)
+
+    if not user_result.get('success'):
+        return jsonify({'code': 400, 'msg': user_result.get('errmsg', '获取用户信息失败')})
+
+    userid = user_result.get('userid', '')
+    openid = user_result.get('openid', '')
+
+    # 获取用户详细信息（包括手机号）
+    user_detail = get_user_detail(wx_client, userid)
+    mobile = user_detail.get('mobile', '') if user_detail.get('success') else ''
+    user_name = user_detail.get('name', '') if user_detail.get('success') else ''
+
+    # 更新确认记录
+    confirmation = ScheduleConfirmation.query.filter_by(confirm_token=state).first()
+    if confirmation:
+        confirmation.wx_userid = userid
+        confirmation.wx_openid = openid
+        if mobile:
+            confirmation.customer_phone = mobile
+        if user_name and not confirmation.customer_name:
+            confirmation.customer_name = user_name
+        db.session.commit()
+
+    # 重定向到确认页面，带上用户信息
+    confirm_url = f"{app.config.get('CONFIRM_BASE_URL', '')}/confirm/{state}"
+    if mobile:
+        confirm_url += f"?phone={mobile}&name={user_name}"
+
+    return redirect(confirm_url)
+
+
+@app.route('/api/wx-config', methods=['GET'])
+def get_wx_config():
+    """获取企业微信JS-SDK配置"""
+    url = request.args.get('url', '')
+
+    if not url:
+        return jsonify({'code': 400, 'msg': '缺少url参数'})
+
+    # 生成签名
+    wx_client = get_wx_work_client()
+    token = wx_client.get_access_token()
+
+    # 获取jsapi_ticket
+    ticket_url = f'https://qyapi.weixin.qq.com/cgi-bin/ticket/get?access_token={token}&type=jsapi'
+    try:
+        req = urllib.request.Request(ticket_url)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if data.get('errcode') != 0:
+                return jsonify({'code': 400, 'msg': '获取ticket失败'})
+            jsapi_ticket = data.get('ticket', '')
+    except Exception as e:
+        return jsonify({'code': 400, 'msg': str(e)})
+
+    # 生成签名
+    noncestr = str(uuid.uuid4()).replace('-', '')[:16]
+    timestamp = str(int(time.time()))
+    sign_str = f'jsapi={jsapi_ticket}&noncestr={noncestr}&timestamp={timestamp}&url={url}'
+    signature = hashlib.sha1(sign_str.encode('utf-8')).hexdigest()
+
+    return jsonify({
+        'code': 200,
+        'data': {
+            'appId': app.config.get('WX_WORK_CORP_ID', ''),
+            'timestamp': timestamp,
+            'nonceStr': noncestr,
+            'signature': signature,
+            'agentId': app.config.get('WX_WORK_AGENT_ID', '')
+        }
+    })
+
+
+@app.route('/api/task/<int:task_id>/confirmation', methods=['GET'])
+@login_required
+def get_task_confirmation(task_id):
+    """获取任务的确认记录"""
+    confirmation = ScheduleConfirmation.query.filter_by(task_id=task_id).order_by(
+        ScheduleConfirmation.created_at.desc()
+    ).first()
+
+    if not confirmation:
+        return jsonify({'code': 200, 'data': None})
+
+    return jsonify({
+        'code': 200,
+        'data': confirmation.to_dict()
+    })
+
+
+@app.route('/api/confirmations', methods=['GET'])
+@login_required
+def list_confirmations():
+    """获取确认记录列表"""
+    status = request.args.get('status', '')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
+    query = ScheduleConfirmation.query
+
+    if status:
+        query = query.filter_by(confirm_status=status)
+
+    # 按创建时间倒序
+    query = query.order_by(ScheduleConfirmation.created_at.desc())
+
+    # 分页
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    return jsonify({
+        'code': 200,
+        'data': {
+            'total': pagination.total,
+            'page': page,
+            'per_page': per_page,
+            'items': [c.to_dict() for c in pagination.items]
+        }
+    })
+
+
 # ==================== Init DB ====================
 
 @app.route('/api/init-db', methods=['POST'])
@@ -1112,12 +1775,42 @@ def init_db():
         ('yzj_flow_inst_id', "VARCHAR(50) DEFAULT ''"),
         ('yzj_form_inst_id', "VARCHAR(50) DEFAULT ''"),
         ('yzj_serial', "VARCHAR(100) DEFAULT ''"),
+        ('task_no', "VARCHAR(50) DEFAULT ''"),
+        ('schedule_confirm_status', "VARCHAR(20) DEFAULT ''"),
     ]:
         try:
             db.session.execute(db.text(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}"))
             db.session.commit()
         except Exception:
             db.session.rollback()
+
+    # 给 schedule_confirmations 表增加 wx_openid 字段（兼容旧库）
+    try:
+        db.session.execute(db.text("ALTER TABLE schedule_confirmations ADD COLUMN wx_openid VARCHAR(64) DEFAULT ''"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # 给 client_contacts 表增加 wx_userid 字段（兼容旧库）
+    try:
+        db.session.execute(db.text("ALTER TABLE client_contacts ADD COLUMN wx_userid VARCHAR(64) DEFAULT ''"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # 给 client_contacts 表增加 wx_sender 字段（兼容旧库）
+    try:
+        db.session.execute(db.text("ALTER TABLE client_contacts ADD COLUMN wx_sender VARCHAR(64) DEFAULT ''"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # 给 schedule_confirmations 表增加 wx_sender 字段（兼容旧库）
+    try:
+        db.session.execute(db.text("ALTER TABLE schedule_confirmations ADD COLUMN wx_sender VARCHAR(64) DEFAULT ''"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
     # Create admin if not exists
     if not User.query.filter_by(username='admin').first():
@@ -1126,7 +1819,7 @@ def init_db():
             password_hash=generate_password_hash('admin123'),
             role='admin'
         )
-        admin.set_permissions(['task', 'report', 'permission', 'driver', 'vehicle', 'labor_rate'])
+        admin.set_permissions(['task', 'client', 'report', 'permission', 'driver', 'vehicle', 'labor_rate'])
         db.session.add(admin)
 
     # Create sample drivers
@@ -1167,4 +1860,4 @@ def init_db():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='127.0.0.1', port=5000)

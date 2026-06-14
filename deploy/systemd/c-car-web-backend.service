@@ -1,0 +1,16 @@
+[Unit]
+Description=Charter Bus Scheduling Flask Backend
+After=network.target
+
+[Service]
+Type=simple
+User=xxb
+Group=xxb
+WorkingDirectory=/home/xxb/c_car_web/backend
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

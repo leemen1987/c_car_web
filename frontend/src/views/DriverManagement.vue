@@ -1,14 +1,20 @@
 <template>
   <div>
-    <el-card>
+    <el-card class="page-card">
       <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:18px;font-weight:bold">司机管理</span>
-          <el-button type="primary" @click="showAdd">添加司机</el-button>
+        <div class="page-header">
+          <div class="page-title">
+            <el-icon :size="20"><User /></el-icon>
+            <span>司机管理</span>
+          </div>
+          <el-button type="primary" @click="showAdd">
+            <el-icon><Plus /></el-icon>
+            <span style="margin-left:4px">添加司机</span>
+          </el-button>
         </div>
       </template>
 
-      <el-table :data="drivers" border stripe>
+      <el-table :data="drivers" stripe style="width:100%">
         <el-table-column prop="id" label="ID" width="60" align="center" />
         <el-table-column prop="name" label="姓名" min-width="120" />
         <el-table-column prop="phone" label="手机号码" min-width="140" />

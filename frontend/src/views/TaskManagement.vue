@@ -87,12 +87,24 @@
             <div v-if="row.yzj_serial" style="font-size:11px;color:#909399;margin-top:2px">{{ row.yzj_serial }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="440" fixed="right">
+        <el-table-column label="客户确认" width="120" align="center">
+          <template #default="{ row }">
+            <div v-if="row.schedule_confirm_status">
+              <el-tag v-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
+              <el-tag v-else-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
+              <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
+            </div>
+            <span v-else style="color:#c0c4cc">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="480" fixed="right">
           <template #default="{ row }">
             <div style="display:flex;flex-wrap:nowrap;gap:4px;justify-content:center">
               <el-button v-if="row.status === 'pending'" type="primary" size="small" @click="showScheduleDialog(row)">排班分配</el-button>
               <el-button v-if="row.status === 'scheduled'" type="warning" size="small" @click="showScheduleDialog(row)">重新排班</el-button>
               <el-button v-if="row.status === 'scheduled'" type="success" size="small" @click="showCompleteDialog(row)">完成任务</el-button>
+              <el-button v-if="row.status === 'scheduled' && !row.schedule_confirm_status" type="primary" size="small" @click="pushConfirm(row)">推送确认</el-button>
+              <el-button v-if="row.schedule_confirm_status" type="success" size="small" @click="showConfirmDetail(row)">确认详情</el-button>
               <el-button v-if="row.change_log && row.change_log.length" type="info" size="small" @click="showChangeLog(row)">变更记录</el-button>
               <el-button v-if="row.status !== 'completed'" type="warning" size="small" @click="showEditDialog(row)">编辑</el-button>
               <el-popconfirm title="确认删除?" @confirm="deleteTask(row.id)">
@@ -116,6 +128,9 @@
             <el-tag v-if="row.status === 'pending'" type="warning" size="small">待排班</el-tag>
             <el-tag v-else-if="row.status === 'scheduled'" type="primary" size="small">已排班</el-tag>
             <el-tag v-else-if="row.status === 'completed'" type="success" size="small">已完成</el-tag>
+            <el-tag v-if="row.yzj_approval_status === 'submitted'" type="success" size="small" style="margin-left:4px">已发起</el-tag>
+            <el-tag v-else-if="row.yzj_approval_status === 'approved'" type="primary" size="small" style="margin-left:4px">已通过</el-tag>
+            <el-tag v-else-if="row.yzj_approval_status === 'rejected'" type="danger" size="small" style="margin-left:4px">已拒绝</el-tag>
           </div>
           <div class="card-body">
             <div class="card-row">
@@ -148,15 +163,27 @@
               <span class="card-label">租车费</span>
               <span>¥{{ row.rental_fee }}</span>
             </div>
+            <div class="card-row" v-if="row.yzj_serial">
+              <span class="card-label">审批</span>
+              <span style="font-size:12px;color:#909399">{{ row.yzj_serial }}</span>
+            </div>
+            <div class="card-row" v-if="row.schedule_confirm_status">
+              <span class="card-label">客户确认</span>
+              <el-tag v-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
+              <el-tag v-else-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
+              <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
+            </div>
           </div>
           <div class="card-actions">
             <el-button v-if="row.status === 'pending'" type="primary" size="small" @click="showScheduleDialog(row)">排班</el-button>
             <el-button v-if="row.status === 'scheduled'" type="warning" size="small" @click="showScheduleDialog(row)">重新排班</el-button>
             <el-button v-if="row.status === 'scheduled'" type="success" size="small" @click="showCompleteDialog(row)">完成</el-button>
+            <el-button v-if="row.status === 'scheduled' && !row.schedule_confirm_status" type="primary" size="small" @click="pushConfirm(row)">推送确认</el-button>
             <el-dropdown trigger="click">
               <el-button size="small" type="info">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item v-if="row.schedule_confirm_status" @click="showConfirmDetail(row)">确认详情</el-dropdown-item>
                   <el-dropdown-item v-if="row.status !== 'completed'" @click="showEditDialog(row)">编辑</el-dropdown-item>
                   <el-dropdown-item v-if="row.change_log && row.change_log.length" @click="showChangeLog(row)">变更记录</el-dropdown-item>
                   <el-dropdown-item divided>
@@ -341,7 +368,7 @@
       </el-form>
       <template #footer>
         <el-button @click="scheduleDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitSchedule">确认排班</el-button>
+        <el-button type="primary" @click="submitSchedule">确认任务</el-button>
       </template>
     </el-dialog>
 
@@ -443,7 +470,7 @@
       <el-table :data="schedulableTasks" border stripe style="width:100%"
         @selection-change="onApprovalSelectionChange" max-height="400">
         <el-table-column type="selection" width="50" align="center"
-          :selectable="(row) => row.status === 'scheduled' && !row.yzj_approval_status && !isPastDeparture(row)" />
+          :selectable="canSubmitApproval" />
         <el-table-column label="用车方" min-width="120">
           <template #default="{ row }">
             <span v-if="row.client_type === 'company'" style="font-weight:600">{{ row.client_company }}</span>
@@ -481,6 +508,8 @@
         <el-table-column label="可发起" width="80" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.yzj_approval_status === 'submitted'" type="success" size="small">已发起</el-tag>
+            <el-tag v-else-if="row.yzj_approval_status === 'approved'" type="primary" size="small">已通过</el-tag>
+            <el-tag v-else-if="row.yzj_approval_status === 'rejected'" type="danger" size="small">可重发</el-tag>
             <el-tag v-else-if="isPastDeparture(row)" type="info" size="small">已过期</el-tag>
             <el-tag v-else type="primary" size="small">可发起</el-tag>
           </template>
@@ -506,12 +535,38 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- Confirm Detail Dialog -->
+    <el-dialog v-model="confirmDialogVisible" title="任务确认详情" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile">
+      <div v-if="confirmDetail" style="padding:0 20px">
+        <el-descriptions :column="isMobile ? 1 : 2" border>
+          <el-descriptions-item label="客户名称">{{ confirmDetail.customer_name || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="联系电话">{{ confirmDetail.customer_phone || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="确认状态">
+            <el-tag v-if="confirmDetail.confirm_status === 'pending'" type="warning">待确认</el-tag>
+            <el-tag v-else-if="confirmDetail.confirm_status === 'confirmed'" type="success">已确认</el-tag>
+            <el-tag v-else-if="confirmDetail.confirm_status === 'rejected'" type="danger">已拒绝</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="确认时间">{{ confirmDetail.confirm_time || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="确认IP" :span="2">{{ confirmDetail.confirm_ip || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="备注" :span="2">{{ confirmDetail.confirm_remark || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="confirmDetail.confirm_token" label="确认链接" :span="2">
+            <el-link type="primary" :href="`/confirm/${confirmDetail.confirm_token}`" target="_blank">
+              {{ `确认链接` }}
+            </el-link>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <template #footer>
+        <el-button @click="confirmDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../utils/api'
 
 const isMobile = ref(false)
@@ -548,6 +603,12 @@ const approvalTemplateSummary = computed(() => {
 const isPastDeparture = (row) => {
   if (!row.departure_time) return false
   return new Date(row.departure_time) <= new Date()
+}
+
+const canSubmitApproval = (row) => {
+  if (row.status !== 'scheduled' || isPastDeparture(row)) return false
+  const status = row.yzj_approval_status
+  return !status || status === 'rejected'
 }
 
 const taskForm = ref({
@@ -786,6 +847,100 @@ const submitApproval = async () => {
     // api interceptor handles error display
   } finally {
     approvalLoading.value = false
+  }
+}
+
+// 排班确认相关
+const confirmDialogVisible = ref(false)
+const confirmDetail = ref(null)
+
+const pushConfirm = async (row) => {
+  try {
+    // 先获取客户的联系人信息（含企业微信UserID和发送人）
+    let wxUserid = ''
+    let wxSender = ''
+    try {
+      const clientRes = await api.get(`/clients/${row.client_id}`)
+      if (clientRes.code === 200 && clientRes.data?.contacts) {
+        const contact = clientRes.data.contacts.find(c => c.wx_userid)
+        if (contact) {
+          wxUserid = contact.wx_userid
+          wxSender = contact.wx_sender || ''
+        }
+      }
+    } catch (e) {
+      // 获取失败不影响推送
+    }
+
+    const isExternal = wxUserid.startsWith('wm')
+    let confirmMsg = ''
+    if (!wxUserid) {
+      confirmMsg = `确定要向客户"${row.client_name}"推送任务确认消息吗？\n⚠️ 未配置企业微信用户ID，需手动发送确认链接`
+    } else if (isExternal && !wxSender) {
+      confirmMsg = `⚠️ 外部联系人未配置发送人，无法自动推送。\n请先在客户管理→联系人中配置"发送人"字段`
+    } else {
+      confirmMsg = `确定要向客户"${row.client_name}"推送任务确认消息吗？\n将通过企业微信发送`
+    }
+
+    await ElMessageBox.confirm(confirmMsg, '推送确认', {
+      confirmButtonText: '推送',
+      cancelButtonText: '取消',
+      type: 'info'
+    })
+
+    const res = await api.post(`/task/${row.id}/push-confirm`, {
+      wx_userid: wxUserid,
+      sender: wxSender
+    })
+
+    if (res.code === 200) {
+      // 如果有确认链接（外部联系人），自动复制并提示
+      if (res.data?.confirm_url) {
+        const url = res.data.confirm_url
+        // 尝试自动复制
+        try {
+          await navigator.clipboard.writeText(url)
+          ElMessage.success('链接已自动复制，请粘贴发送给客户')
+        } catch {
+          ElMessage.success('确认链接已生成')
+        }
+        ElMessageBox.alert(
+          `<div style="text-align:center">
+            <p style="font-size:15px;margin-bottom:12px">📋 请将以下链接发送给客户</p>
+            <div style="background:#f5f7fa;padding:12px;border-radius:8px;margin:8px 0">
+              <code style="word-break:break-all;font-size:13px;color:#409eff">${url}</code>
+            </div>
+            <p style="color:#909399;font-size:12px">客户点击链接即可确认任务</p>
+          </div>`,
+          '发送确认链接给客户',
+          { dangerouslyUseHTMLString: true, confirmButtonText: '复制链接' }
+        ).then(() => {
+          navigator.clipboard?.writeText(url)
+          ElMessage.success('链接已复制到剪贴板')
+        }).catch(() => {})
+      } else {
+        ElMessage.success(res.msg || '推送成功')
+      }
+      loadTasks()
+    }
+  } catch (e) {
+    if (e !== 'cancel') {
+      // api interceptor handles error display
+    }
+  }
+}
+
+const showConfirmDetail = async (row) => {
+  try {
+    const res = await api.get(`/task/${row.id}/confirmation`)
+    if (res.code === 200 && res.data) {
+      confirmDetail.value = res.data
+      confirmDialogVisible.value = true
+    } else {
+      ElMessage.info('暂无确认记录')
+    }
+  } catch (e) {
+    // api interceptor handles error display
   }
 }
 

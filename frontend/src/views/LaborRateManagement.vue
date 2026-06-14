@@ -1,14 +1,20 @@
 <template>
   <div>
-    <el-card>
+    <el-card class="page-card">
       <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:18px;font-weight:bold">差费标准管理</span>
-          <el-button type="primary" @click="showAdd">添加标准</el-button>
+        <div class="page-header">
+          <div class="page-title">
+            <el-icon :size="20"><Money /></el-icon>
+            <span>差费标准管理</span>
+          </div>
+          <el-button type="primary" @click="showAdd">
+            <el-icon><Plus /></el-icon>
+            <span style="margin-left:4px">添加标准</span>
+          </el-button>
         </div>
       </template>
 
-      <el-table :data="rates" border stripe>
+      <el-table :data="rates" stripe style="width:100%">
         <el-table-column prop="id" label="ID" width="60" align="center" />
         <el-table-column prop="location" label="目的地" min-width="200" />
         <el-table-column prop="labor_rate" label="人工费标准(元)" min-width="160" align="right" />
@@ -17,7 +23,7 @@
           <template #default="{ row }">
             <el-popconfirm title="确认删除?" @confirm="handleDelete(row.id)">
               <template #reference>
-                <el-button type="danger" size="small">删除</el-button>
+                <el-button type="danger" link size="small">删除</el-button>
               </template>
             </el-popconfirm>
           </template>
