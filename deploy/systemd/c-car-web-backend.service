@@ -1,5 +1,5 @@
 [Unit]
-Description=Charter Bus Scheduling Flask Backend
+Description=Charter Bus Scheduling Flask Backend (Dev)
 After=network.target
 
 [Service]

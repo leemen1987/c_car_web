@@ -1,5 +1,5 @@
 [Unit]
-Description=Charter Bus Scheduling Vite Frontend
+Description=Charter Bus Scheduling Vite Frontend (Dev)
 After=network.target
 
 [Service]
@@ -7,8 +7,8 @@ Type=simple
 User=xxb
 Group=xxb
 WorkingDirectory=/home/xxb/c_car_web/frontend
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/npm run dev -- --host 127.0.0.1 --port 5173
+Environment=PATH=/home/xxb/.nvm/versions/node/v24.16.0/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/xxb/.nvm/versions/node/v24.16.0/bin/npm run dev -- --host 127.0.0.1 --port 5174
 Restart=always
 RestartSec=5
 

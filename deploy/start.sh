@@ -13,8 +13,8 @@ python3 app.py &
 BACKEND_PID=$!
 
 cd "$PROJECT_DIR/frontend"
-echo "启动前端: npm run dev (127.0.0.1:5173)"
-npm run dev -- --host 127.0.0.1 --port 5173 &
+echo "启动前端: npm run dev (127.0.0.1:5174)"
+npm run dev -- --host 127.0.0.1 &
 FRONTEND_PID=$!
 
 echo ""
