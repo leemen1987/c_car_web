@@ -4,7 +4,7 @@
 
 Charter bus scheduling system (包车排班系统). Two-tier monolith:
 
-- **Backend**: Flask + SQLAlchemy + MySQL — single `backend/app.py` (1879 lines, all routes). Models in `backend/models.py`. Config in `backend/config.py`.
+- **Backend**: Flask + SQLAlchemy + MySQL — single `backend/app.py` (~1976 lines, all routes). Models in `backend/models.py` (~359 lines). Config in `backend/config.py`.
 - **Frontend**: Vue 3 + Element Plus + Vite — `frontend/src/`. Views map 1:1 to routes in `frontend/src/router/index.js`.
 - **No monorepo tooling** — backend and frontend are independent, no shared build.
 
@@ -35,7 +35,7 @@ curl -s -X POST http://127.0.0.1:5000/api/init-db
 ## Port
 
 - Frontend dev server: **5174** (set in `frontend/vite.config.js`, referenced by `deploy/nginx/c_car_web.conf`)
-- Backend: **5000** (hardcoded in `backend/app.py:1879`)
+- Backend: **5000** (hardcoded in `backend/app.py:1976`)
 - Nginx: **80** → proxies `/api/` to `:5000`, `/` to `:5174`
 
 Note: vite.config.js is the single source of truth for frontend port. Do not add `--port` overrides in systemd or start.sh — they will desync from Nginx.
@@ -43,7 +43,7 @@ Note: vite.config.js is the single source of truth for frontend port. Do not add
 ## Database
 
 - MySQL at `config.py:5` — credentials are hardcoded (not env vars). Connection pool has `pool_recycle=300` and `pool_pre_ping=True` to handle idle disconnects.
-- **Schema migrations** are done via raw ALTER TABLE in the `/api/init-db` endpoint (`app.py:1763`). New columns must be added there. There is no migration framework (no Alembic).
+- **Schema migrations** are done via raw ALTER TABLE in the `/api/init-db` endpoint (`app.py:1834`). New columns must be added there. There is no migration framework (no Alembic).
 - Default admin: `admin / admin123` (created by init-db).
 
 ## Auth & Permissions
@@ -60,8 +60,9 @@ Note: vite.config.js is the single source of truth for frontend port. Do not add
 ## Key Patterns
 
 - All API responses follow `{code: 200, data: ..., msg: ...}`. Frontend axios interceptor (`frontend/src/utils/api.js`) rejects non-200 codes.
-- Task lifecycle: `pending` → `scheduled` (assigned vehicle+driver) → `completed` (actual fees recorded).
-- Task change tracking: `Task.add_changes()` stores JSON change_log with snapshots.
+- Task lifecycle: `pending` → `scheduled` (assigned vehicle+driver) → `completed` (actual fees + payment info recorded). Can also be `cancelled` (requires mandatory reason). Cancelled/completed tasks cannot be edited.
+- Task change tracking: `Task.add_changes()` stores JSON change_log with snapshots. Cancel actions also recorded here.
+- Task completion includes: actual fees, remark, payment status (is_paid/paid_date/paid_method). Invoice info entered separately via `POST /api/tasks/<id>/invoice` after completion.
 - Confirmation flow: push confirm link via WeChat Work → customer opens `/confirm/:token` (public, no login) → confirms/rejects.
 - Approval flow groups tasks by vehicle company, one approval instance per company group.
 

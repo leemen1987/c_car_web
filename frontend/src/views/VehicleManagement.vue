@@ -46,17 +46,13 @@
           <el-input v-model="form.plate_number" />
         </el-form-item>
         <el-form-item label="车辆类型">
-          <el-select v-model="form.vehicle_type" style="width:100%">
-            <el-option label="大巴(45座)" value="大巴(45座)" />
-            <el-option label="中巴(25座)" value="中巴(25座)" />
-            <el-option label="小巴(15座)" value="小巴(15座)" />
-            <el-option label="商务车(7座)" value="商务车(7座)" />
-          </el-select>
+          <el-input v-model="form.vehicle_type" placeholder="请输入车辆类型" />
         </el-form-item>
         <el-form-item label="所属公司">
           <el-select v-model="form.company" placeholder="请选择所属公司" style="width:100%">
             <el-option label="国顺司" value="国顺司" />
             <el-option label="国开司" value="国开司" />
+            <el-option label="大众司" value="大众司" />
             <el-option label="外单位" value="外单位" />
           </el-select>
         </el-form-item>

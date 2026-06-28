@@ -76,6 +76,7 @@
             <el-tag v-if="row.status === 'pending'" type="warning">待排班</el-tag>
             <el-tag v-else-if="row.status === 'scheduled'" type="primary">已排班</el-tag>
             <el-tag v-else-if="row.status === 'completed'" type="success">已完成</el-tag>
+            <el-tag v-else-if="row.status === 'cancelled'" type="danger">已取消</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="审批" width="160" align="center">
@@ -97,21 +98,40 @@
             <span v-else style="color:#c0c4cc">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="480" fixed="right">
+        <el-table-column label="发票" width="80" align="center">
           <template #default="{ row }">
-            <div style="display:flex;flex-wrap:nowrap;gap:4px;justify-content:center">
-              <el-button v-if="row.status === 'pending'" type="primary" size="small" @click="showScheduleDialog(row)">排班分配</el-button>
+            <el-tag v-if="row.invoice_no" type="success" size="small">已开</el-tag>
+            <span v-else-if="row.status === 'completed'" style="color:#e6a23c;cursor:pointer;font-size:12px" @click="showInvoiceDialog(row)">未开</span>
+            <span v-else style="color:#c0c4cc">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="300" fixed="right">
+          <template #default="{ row }">
+            <div style="display:flex;flex-wrap:nowrap;gap:4px;justify-content:center;align-items:center">
+              <el-button v-if="row.status === 'pending'" type="primary" size="small" @click="showScheduleDialog(row)">排班</el-button>
               <el-button v-if="row.status === 'scheduled'" type="warning" size="small" @click="showScheduleDialog(row)">重新排班</el-button>
-              <el-button v-if="row.status === 'scheduled'" type="success" size="small" @click="showCompleteDialog(row)">完成任务</el-button>
-              <el-button v-if="row.status === 'scheduled' && !row.schedule_confirm_status" type="primary" size="small" @click="pushConfirm(row)">推送确认</el-button>
-              <el-button v-if="row.schedule_confirm_status" type="success" size="small" @click="showConfirmDetail(row)">确认详情</el-button>
-              <el-button v-if="row.change_log && row.change_log.length" type="info" size="small" @click="showChangeLog(row)">变更记录</el-button>
-              <el-button v-if="row.status !== 'completed'" type="warning" size="small" @click="showEditDialog(row)">编辑</el-button>
-              <el-popconfirm title="确认删除?" @confirm="deleteTask(row.id)">
-                <template #reference>
-                  <el-button type="danger" size="small">删除</el-button>
+              <el-button v-if="row.status === 'scheduled'" type="success" size="small" @click="showCompleteDialog(row)">完成</el-button>
+              <el-button v-if="row.status === 'pending' || row.status === 'scheduled'" type="danger" size="small" plain @click="showCancelDialog(row)">取消</el-button>
+              <el-button v-if="(row.status === 'completed' || row.status === 'cancelled') && row.change_log && row.change_log.length" type="info" size="small" @click="showChangeLog(row)">变更记录</el-button>
+              <el-dropdown trigger="click">
+                <el-button size="small" type="info" plain>更多 <el-icon style="margin-left:2px"><ArrowDown /></el-icon></el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item v-if="row.status === 'scheduled' && !row.schedule_confirm_status" @click="pushConfirm(row)">推送确认</el-dropdown-item>
+                    <el-dropdown-item v-if="row.schedule_confirm_status" @click="showConfirmDetail(row)">确认详情</el-dropdown-item>
+                    <el-dropdown-item v-if="row.status === 'completed'" @click="showInvoiceDialog(row)">录入发票</el-dropdown-item>
+                    <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled' && row.change_log && row.change_log.length" @click="showChangeLog(row)">变更记录</el-dropdown-item>
+                    <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled'" @click="showEditDialog(row)">编辑</el-dropdown-item>
+                    <el-dropdown-item divided>
+                      <el-popconfirm title="确认删除?" @confirm="deleteTask(row.id)">
+                        <template #reference>
+                          <span style="color:#f56c6c;width:100%;display:block">删除</span>
+                        </template>
+                      </el-popconfirm>
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
                 </template>
-              </el-popconfirm>
+              </el-dropdown>
             </div>
           </template>
         </el-table-column>
@@ -128,6 +148,7 @@
             <el-tag v-if="row.status === 'pending'" type="warning" size="small">待排班</el-tag>
             <el-tag v-else-if="row.status === 'scheduled'" type="primary" size="small">已排班</el-tag>
             <el-tag v-else-if="row.status === 'completed'" type="success" size="small">已完成</el-tag>
+            <el-tag v-else-if="row.status === 'cancelled'" type="danger" size="small">已取消</el-tag>
             <el-tag v-if="row.yzj_approval_status === 'submitted'" type="success" size="small" style="margin-left:4px">已发起</el-tag>
             <el-tag v-else-if="row.yzj_approval_status === 'approved'" type="primary" size="small" style="margin-left:4px">已通过</el-tag>
             <el-tag v-else-if="row.yzj_approval_status === 'rejected'" type="danger" size="small" style="margin-left:4px">已拒绝</el-tag>
@@ -178,13 +199,15 @@
             <el-button v-if="row.status === 'pending'" type="primary" size="small" @click="showScheduleDialog(row)">排班</el-button>
             <el-button v-if="row.status === 'scheduled'" type="warning" size="small" @click="showScheduleDialog(row)">重新排班</el-button>
             <el-button v-if="row.status === 'scheduled'" type="success" size="small" @click="showCompleteDialog(row)">完成</el-button>
+            <el-button v-if="row.status === 'pending' || row.status === 'scheduled'" type="danger" size="small" @click="showCancelDialog(row)">取消</el-button>
             <el-button v-if="row.status === 'scheduled' && !row.schedule_confirm_status" type="primary" size="small" @click="pushConfirm(row)">推送确认</el-button>
             <el-dropdown trigger="click">
               <el-button size="small" type="info">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item v-if="row.schedule_confirm_status" @click="showConfirmDetail(row)">确认详情</el-dropdown-item>
-                  <el-dropdown-item v-if="row.status !== 'completed'" @click="showEditDialog(row)">编辑</el-dropdown-item>
+                  <el-dropdown-item v-if="row.status === 'completed'" @click="showInvoiceDialog(row)">录入发票</el-dropdown-item>
+                  <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled'" @click="showEditDialog(row)">编辑</el-dropdown-item>
                   <el-dropdown-item v-if="row.change_log && row.change_log.length" @click="showChangeLog(row)">变更记录</el-dropdown-item>
                   <el-dropdown-item divided>
                     <el-popconfirm title="确认删除?" @confirm="deleteTask(row.id)">
@@ -246,11 +269,8 @@
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="车辆类型">
-              <el-select v-model="taskForm.vehicle_type" placeholder="请选择" style="width:100%">
-                <el-option label="大巴(45座)" value="大巴(45座)" />
-                <el-option label="中巴(25座)" value="中巴(25座)" />
-                <el-option label="小巴(15座)" value="小巴(15座)" />
-                <el-option label="商务车(7座)" value="商务车(7座)" />
+              <el-select v-model="taskForm.vehicle_type" placeholder="请选择或输入" style="width:100%" filterable allow-create>
+                <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -270,12 +290,12 @@
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="出车时间">
-              <el-date-picker v-model="taskForm.departure_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" @change="onTimeChange" />
+              <el-date-picker v-model="taskForm.departure_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" :disabled-date="disablePastDates" @change="onDepartureTimeChange" />
             </el-form-item>
           </el-col>
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="回程时间">
-              <el-date-picker v-model="taskForm.return_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" @change="onTimeChange" />
+              <el-date-picker v-model="taskForm.return_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" :disabled-date="disableBeforeDeparture" @change="onTimeChange" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -333,6 +353,13 @@
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="预估利润">
               <el-input :model-value="estimatedProfit" disabled />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="isMobile ? 0 : 20">
+          <el-col :span="24">
+            <el-form-item label="备注">
+              <el-input v-model="taskForm.remark" type="textarea" :rows="2" placeholder="选填" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -394,6 +421,25 @@
         <el-form-item label="最终利润">
           <el-input :model-value="finalProfitDisplay" disabled />
         </el-form-item>
+        <el-divider />
+        <el-form-item label="备注">
+          <el-input v-model="completeForm.remark" type="textarea" :rows="2" placeholder="选填" />
+        </el-form-item>
+        <el-form-item label="是否已收款">
+          <el-switch v-model="completeForm.is_paid" />
+        </el-form-item>
+        <template v-if="completeForm.is_paid">
+          <el-form-item label="收款日期">
+            <el-date-picker v-model="completeForm.paid_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" placeholder="请选择收款日期" />
+          </el-form-item>
+          <el-form-item label="收款方式">
+            <el-select v-model="completeForm.paid_method" style="width:100%" placeholder="请选择收款方式">
+              <el-option label="转账" value="转账" />
+              <el-option label="二维码" value="二维码" />
+              <el-option label="现金" value="现金" />
+            </el-select>
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="completeDialogVisible = false">取消</el-button>
@@ -407,7 +453,24 @@
       <el-timeline>
         <el-timeline-item v-for="(log, idx) in currentChangeLog" :key="idx" :timestamp="log.changed_at" placement="top">
           <el-card>
-            <template v-if="log.snapshot">
+            <template v-if="log.snapshot && log.snapshot.cancel_reason">
+              <el-alert type="error" :closable="false" style="margin-bottom:8px">
+                <template #title>
+                  <span style="font-weight:bold">任务取消</span>
+                </template>
+                <div>取消原因：{{ log.snapshot.cancel_reason }}</div>
+                <div v-if="log.snapshot.cancelled_at" style="margin-top:4px;color:#909399;font-size:12px">取消时间：{{ log.snapshot.cancelled_at }}</div>
+              </el-alert>
+              <template v-if="log.snapshot.client_name !== undefined">
+                <el-descriptions :column="isMobile ? 1 : 2" size="small" border style="margin-top:8px">
+                  <el-descriptions-item label="用车联系人">{{ log.snapshot.client_name }}</el-descriptions-item>
+                  <el-descriptions-item label="出发 → 目的地">{{ log.snapshot.departure }} → {{ log.snapshot.destination }}</el-descriptions-item>
+                  <el-descriptions-item label="出车时间">{{ log.snapshot.departure_time }}</el-descriptions-item>
+                  <el-descriptions-item label="车辆类型">{{ log.snapshot.vehicle_type }}</el-descriptions-item>
+                </el-descriptions>
+              </template>
+            </template>
+            <template v-else-if="log.snapshot">
               <el-descriptions :column="isMobile ? 1 : 2" size="small" border>
                 <el-descriptions-item label="用车联系人">
                   <span :style="isChanged(log, 'client_name') ? 'color:#f56c6c;font-weight:bold' : ''">{{ log.snapshot.client_name }}</span>
@@ -460,6 +523,48 @@
         </el-timeline-item>
       </el-timeline>
       </div>
+    </el-dialog>
+
+    <!-- Cancel Task Dialog -->
+    <el-dialog v-model="cancelDialogVisible" title="取消任务" :width="isMobile ? '100%' : '450px'" :fullscreen="isMobile">
+      <el-form label-width="80px">
+        <el-form-item label="取消原因">
+          <el-input v-model="cancelReason" type="textarea" :rows="3" placeholder="请输入取消原因" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cancelDialogVisible = false">取消</el-button>
+        <el-button type="danger" @click="cancelTask">确定取消</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Invoice Dialog -->
+    <el-dialog v-model="invoiceDialogVisible" title="录入发票信息" :width="isMobile ? '100%' : '500px'" :fullscreen="isMobile">
+      <el-form :model="invoiceForm" label-width="100px">
+        <el-form-item label="发票类型">
+          <el-select v-model="invoiceForm.invoice_type" style="width:100%" placeholder="请选择发票类型">
+            <el-option label="增值税普通发票" value="增值税普通发票" />
+            <el-option label="增值税专用发票" value="增值税专用发票" />
+            <el-option label="收据" value="收据" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="发票号码">
+          <el-input v-model="invoiceForm.invoice_no" placeholder="请输入发票号码" />
+        </el-form-item>
+        <el-form-item label="发票金额">
+          <el-input-number v-model="invoiceForm.invoice_amount" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="开票日期">
+          <el-date-picker v-model="invoiceForm.invoice_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" placeholder="请选择开票日期" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="invoiceForm.invoice_remark" type="textarea" :rows="2" placeholder="选填" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="invoiceDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitInvoice">保存</el-button>
+      </template>
     </el-dialog>
 
     <!-- Approval Dialog -->
@@ -577,6 +682,8 @@ onUnmounted(() => window.removeEventListener('resize', checkMobile))
 const tasks = ref([])
 const laborRates = ref([])
 const clients = ref([])
+const vehicles = ref([])
+const vehicleTypes = computed(() => [...new Set(vehicles.value.map(v => v.vehicle_type).filter(Boolean))])
 const taskDialogVisible = ref(false)
 const scheduleDialogVisible = ref(false)
 const completeDialogVisible = ref(false)
@@ -584,6 +691,12 @@ const changeLogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
 const currentChangeLog = ref([])
+const cancelDialogVisible = ref(false)
+const cancelTaskId = ref(null)
+const cancelReason = ref('')
+const invoiceDialogVisible = ref(false)
+const invoiceTaskId = ref(null)
+const invoiceForm = ref({ invoice_type: '', invoice_no: '', invoice_amount: 0, invoice_date: '', invoice_remark: '' })
 
 // 云之家审批相关
 const approvalDialogVisible = ref(false)
@@ -615,7 +728,7 @@ const taskForm = ref({
   client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null,
   departure: '', destination: '', departure_time: '', return_time: '',
   vehicle_type: '', mileage: 0, rental_fee: 0,
-  fuel_fee: 0, bridge_fee: 0, labor_fee: 0
+  fuel_fee: 0, bridge_fee: 0, labor_fee: 0, remark: ''
 })
 
 const currentContacts = computed(() => {
@@ -639,7 +752,7 @@ const scheduleInfo = ref({ vehicles: [], drivers: [], labor_rate: 0, task_start:
 const scheduleForm = ref({ vehicle_id: null, driver_id: null })
 const scheduleTaskId = ref(null)
 
-const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0 })
+const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '' })
 const completeTaskId = ref(null)
 
 const estimatedCost = computed(() => (taskForm.value.fuel_fee + taskForm.value.bridge_fee + taskForm.value.labor_fee).toFixed(2))
@@ -664,7 +777,7 @@ const loadTasks = async () => {
 const showAddDialog = () => {
   isEdit.value = false
   editId.value = null
-  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0 }
+  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
   taskDialogVisible.value = true
 }
 
@@ -678,7 +791,8 @@ const showEditDialog = (row) => {
     departure: row.departure, destination: row.destination,
     departure_time: row.departure_time, return_time: row.return_time || '', vehicle_type: row.vehicle_type,
     mileage: row.mileage, rental_fee: row.rental_fee, fuel_fee: row.fuel_fee,
-    bridge_fee: row.bridge_fee, labor_rate_id: matchedRate ? matchedRate.id : null, labor_fee: row.labor_fee
+    bridge_fee: row.bridge_fee, labor_rate_id: matchedRate ? matchedRate.id : null, labor_fee: row.labor_fee,
+    remark: row.remark || ''
   }
   taskDialogVisible.value = true
 }
@@ -694,6 +808,14 @@ const submitTask = async () => {
   }
   if (!taskForm.value.departure || !taskForm.value.destination || !taskForm.value.departure_time || !taskForm.value.return_time) {
     ElMessage.warning('请填写必填信息')
+    return
+  }
+  if (new Date(taskForm.value.departure_time) < new Date()) {
+    ElMessage.warning('出车时间不能选择过去的时间')
+    return
+  }
+  if (new Date(taskForm.value.return_time) < new Date(taskForm.value.departure_time)) {
+    ElMessage.warning('回程时间不能早于出车时间')
     return
   }
   try {
@@ -734,7 +856,7 @@ const submitSchedule = async () => {
 
 const showCompleteDialog = (row) => {
   completeTaskId.value = row.id
-  completeForm.value = { actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0 }
+  completeForm.value = { actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '' }
   completeDialogVisible.value = true
 }
 
@@ -760,12 +882,53 @@ const showChangeLog = (row) => {
   changeLogVisible.value = true
 }
 
+const showCancelDialog = (row) => {
+  cancelTaskId.value = row.id
+  cancelReason.value = ''
+  cancelDialogVisible.value = true
+}
+
+const cancelTask = async () => {
+  if (!cancelReason.value.trim()) { ElMessage.warning('请输入取消原因'); return }
+  try {
+    await api.post(`/tasks/${cancelTaskId.value}/cancel`, { reason: cancelReason.value.trim() })
+    ElMessage.success('任务已取消')
+    cancelDialogVisible.value = false
+    loadTasks()
+  } catch (e) {}
+}
+
+const showInvoiceDialog = (row) => {
+  invoiceTaskId.value = row.id
+  invoiceForm.value = {
+    invoice_type: row.invoice_type || '',
+    invoice_no: row.invoice_no || '',
+    invoice_amount: row.invoice_amount || 0,
+    invoice_date: row.invoice_date || '',
+    invoice_remark: row.invoice_remark || ''
+  }
+  invoiceDialogVisible.value = true
+}
+
+const submitInvoice = async () => {
+  try {
+    await api.post(`/tasks/${invoiceTaskId.value}/invoice`, invoiceForm.value)
+    ElMessage.success('发票信息已保存')
+    invoiceDialogVisible.value = false
+    loadTasks()
+  } catch (e) {}
+}
+
 const loadLaborRates = async () => {
   try { const res = await api.get('/labor-rates'); laborRates.value = res.data } catch (e) {}
 }
 
 const loadClients = async () => {
   try { const res = await api.get('/clients'); clients.value = res.data } catch (e) {}
+}
+
+const loadVehicles = async () => {
+  try { const res = await api.get('/vehicles'); vehicles.value = res.data } catch (e) {}
 }
 
 const onClientTypeChange = () => {
@@ -810,6 +973,30 @@ const onLaborRateChange = (rateId) => {
 }
 
 const onTimeChange = () => {
+  recalcLaborFee()
+}
+
+const disablePastDates = (date) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date < today
+}
+
+const disableBeforeDeparture = (date) => {
+  const dt = taskForm.value.departure_time
+  if (!dt) return disablePastDates(date)
+  const dep = new Date(dt)
+  dep.setHours(0, 0, 0, 0)
+  return date < dep
+}
+
+const onDepartureTimeChange = () => {
+  const dt = taskForm.value.departure_time
+  const rt = taskForm.value.return_time
+  if (dt && rt && new Date(rt) < new Date(dt)) {
+    taskForm.value.return_time = ''
+    ElMessage.warning('回程时间已清空，请重新选择')
+  }
   recalcLaborFee()
 }
 
@@ -944,7 +1131,7 @@ const showConfirmDetail = async (row) => {
   }
 }
 
-onMounted(() => { loadTasks(); loadLaborRates(); loadClients() })
+onMounted(() => { loadTasks(); loadLaborRates(); loadClients(); loadVehicles() })
 </script>
 
 <style scoped>

@@ -130,7 +130,7 @@ class WxWorkClient:
             body = ''
             try:
                 body = e.read().decode('utf-8')
-            except:
+            except Exception:
                 pass
             return {
                 'success': False,

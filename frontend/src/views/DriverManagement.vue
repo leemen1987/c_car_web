@@ -15,7 +15,7 @@
       </template>
 
       <el-table :data="drivers" stripe style="width:100%">
-        <el-table-column prop="id" label="ID" width="60" align="center" />
+        <el-table-column type="index" label="ID" width="60" align="center" />
         <el-table-column prop="name" label="姓名" min-width="120" />
         <el-table-column prop="phone" label="手机号码" min-width="140" />
         <el-table-column prop="status" label="状态" width="100" align="center">

@@ -82,6 +82,12 @@
             <span v-else style="color:#c0c4cc">-</span>
           </template>
         </el-table-column>
+        <el-table-column prop="external_corp_name" label="企业微信名称" min-width="120">
+          <template #default="{ row }">
+            <span v-if="row.external_corp_name">{{ row.external_corp_name }}</span>
+            <span v-else style="color:#c0c4cc">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="160" align="center">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="editContact(row)">编辑</el-button>
@@ -123,6 +129,9 @@
               </el-option>
             </el-select>
           </el-form-item>
+          <el-form-item v-if="contactForm.external_corp_name" label="企业微信名称">
+            <el-input v-model="contactForm.external_corp_name" disabled />
+          </el-form-item>
         </el-form>
         <template #footer>
           <el-button @click="contactFormVisible = false">取消</el-button>
@@ -147,7 +156,7 @@ const form = ref({ name: '', address: '' })
 const contactsVisible = ref(false)
 const currentClient = ref({ id: null, name: '', contacts: [] })
 const contactFormVisible = ref(false)
-const contactForm = ref({ name: '', phone: '' })
+const contactForm = ref({ name: '', phone: '', wx_userid: '', wx_sender: '', external_corp_name: '' })
 const externalContacts = ref([])
 const fetchingContacts = ref(false)
 
@@ -178,13 +187,13 @@ const showContacts = (row) => {
 }
 
 const showAddContact = () => {
-  contactForm.value = { name: '', phone: '', wx_userid: '', wx_sender: '' }
+  contactForm.value = { name: '', phone: '', wx_userid: '', wx_sender: '', external_corp_name: '' }
   externalContacts.value = []
   contactFormVisible.value = true
 }
 
 const editContact = (row) => {
-  contactForm.value = { id: row.id, name: row.name, phone: row.phone, wx_userid: row.wx_userid || '', wx_sender: row.wx_sender || '' }
+  contactForm.value = { id: row.id, name: row.name, phone: row.phone, wx_userid: row.wx_userid || '', wx_sender: row.wx_sender || '', external_corp_name: row.external_corp_name || '' }
   externalContacts.value = []
   contactFormVisible.value = true
 }
@@ -201,6 +210,15 @@ const fetchExternalContacts = async () => {
       externalContacts.value = res.data || []
       if (externalContacts.value.length === 0) {
         ElMessage.info('未找到外部联系人')
+      } else {
+        // 如果当前wx_userid已在列表中，自动设置external_corp_name
+        const currentWxUserid = contactForm.value.wx_userid
+        if (currentWxUserid) {
+          const matched = externalContacts.value.find(c => c.external_userid === currentWxUserid)
+          if (matched) {
+            contactForm.value.external_corp_name = matched.name || ''
+          }
+        }
       }
     }
   } catch (e) {
@@ -214,7 +232,7 @@ const onExternalContactSelect = (val) => {
   const selected = externalContacts.value.find(c => c.external_userid === val)
   if (selected) {
     contactForm.value.name = selected.name
-    contactForm.value.external_corp_name = selected.corp_name || ''
+    contactForm.value.external_corp_name = selected.name || ''
   }
 }
 

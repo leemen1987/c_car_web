@@ -17,7 +17,7 @@ class User(db.Model):
     def get_permissions(self):
         try:
             return json.loads(self.permissions) if self.permissions else []
-        except:
+        except (json.JSONDecodeError, ValueError):
             return []
 
     def set_permissions(self, perms):
@@ -117,6 +117,7 @@ class ClientContact(db.Model):
     phone = db.Column(db.String(20), default='')
     wx_userid = db.Column(db.String(64), default='')  # 企业微信用户ID（内部员工或外部联系人）
     wx_sender = db.Column(db.String(64), default='')  # 外部联系人消息发送人（内部员工UserID）
+    external_corp_name = db.Column(db.String(100), default='')  # 企业微信外部联系人所属公司
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     def to_dict(self):
@@ -126,7 +127,8 @@ class ClientContact(db.Model):
             'name': self.name,
             'phone': self.phone,
             'wx_userid': self.wx_userid,
-            'wx_sender': self.wx_sender
+            'wx_sender': self.wx_sender,
+            'external_corp_name': self.external_corp_name
         }
 
 
@@ -160,7 +162,16 @@ class Task(db.Model):
     other_fee = db.Column(db.Float, default=0)  # 其他费用
     actual_cost = db.Column(db.Float, default=0)  # 实际成本
     final_profit = db.Column(db.Float, default=0)  # 最终利润
-    status = db.Column(db.String(20), default='pending')  # pending, scheduled, completed
+    remark = db.Column(db.Text, default='')  # 备注
+    is_paid = db.Column(db.Boolean, default=False)  # 是否已收款
+    paid_date = db.Column(db.DateTime, nullable=True)  # 收款日期
+    paid_method = db.Column(db.String(20), default='')  # 收款方式：转账/二维码/现金
+    invoice_type = db.Column(db.String(30), default='')  # 发票类型：增值税普通发票/增值税专用发票/收据
+    invoice_no = db.Column(db.String(50), default='')  # 发票号码
+    invoice_amount = db.Column(db.Float, default=0)  # 发票金额
+    invoice_date = db.Column(db.DateTime, nullable=True)  # 开票日期
+    invoice_remark = db.Column(db.Text, default='')  # 发票备注
+    status = db.Column(db.String(20), default='pending')  # pending, scheduled, completed, cancelled
     yzj_approval_status = db.Column(db.String(20), default='')  # 审批状态：空=未发起, submitted=已发起, approved=已通过, rejected=已拒绝
     yzj_flow_inst_id = db.Column(db.String(50), default='')  # 云之家流程实例ID
     yzj_form_inst_id = db.Column(db.String(50), default='')  # 云之家表单实例ID
@@ -175,7 +186,7 @@ class Task(db.Model):
     def get_change_log(self):
         try:
             return json.loads(self.change_log) if self.change_log else []
-        except:
+        except (json.JSONDecodeError, ValueError):
             return []
 
     def add_changes(self, changes, snapshot):
@@ -233,6 +244,15 @@ class Task(db.Model):
             'other_fee': self.other_fee,
             'actual_cost': self.actual_cost,
             'final_profit': self.final_profit,
+            'remark': self.remark or '',
+            'is_paid': self.is_paid,
+            'paid_date': self.paid_date.strftime('%Y-%m-%d') if self.paid_date else None,
+            'paid_method': self.paid_method or '',
+            'invoice_type': self.invoice_type or '',
+            'invoice_no': self.invoice_no or '',
+            'invoice_amount': self.invoice_amount,
+            'invoice_date': self.invoice_date.strftime('%Y-%m-%d') if self.invoice_date else None,
+            'invoice_remark': self.invoice_remark or '',
             'status': self.status,
             'yzj_approval_status': getattr(self, 'yzj_approval_status', ''),
             'yzj_serial': getattr(self, 'yzj_serial', ''),

@@ -371,7 +371,14 @@ def add_contact(client_id):
     if not client:
         return jsonify({'code': 404, 'msg': '单位不存在'})
     data = request.get_json()
-    contact = ClientContact(client_id=client_id, name=data.get('name', ''), phone=data.get('phone', ''), wx_userid=data.get('wx_userid', ''), wx_sender=data.get('wx_sender', ''))
+    contact = ClientContact(
+        client_id=client_id,
+        name=data.get('name', ''),
+        phone=data.get('phone', ''),
+        wx_userid=data.get('wx_userid', ''),
+        wx_sender=data.get('wx_sender', ''),
+        external_corp_name=data.get('external_corp_name', '')
+    )
     db.session.add(contact)
     db.session.commit()
     return jsonify({'code': 200, 'msg': '添加成功', 'data': contact.to_dict()})
@@ -392,6 +399,8 @@ def update_contact(client_id, contact_id):
         contact.wx_userid = data['wx_userid']
     if 'wx_sender' in data:
         contact.wx_sender = data['wx_sender']
+    if 'external_corp_name' in data:
+        contact.external_corp_name = data['external_corp_name']
     db.session.commit()
     return jsonify({'code': 200, 'msg': '更新成功', 'data': contact.to_dict()})
 
@@ -465,6 +474,7 @@ def create_task():
         fuel_fee=data.get('fuel_fee', 0),
         bridge_fee=data.get('bridge_fee', 0),
         labor_fee=data.get('labor_fee', 0),
+        remark=data.get('remark', ''),
         status='pending'
     )
     task.estimated_cost = task.fuel_fee + task.bridge_fee + task.labor_fee
@@ -557,6 +567,9 @@ def update_task(task_id):
             'labor_fee': task.labor_fee,
         }
         task.add_changes(change_list, snapshot)
+
+    if 'remark' in data:
+        task.remark = data['remark']
 
     db.session.commit()
     return jsonify({'code': 200, 'msg': '更新成功', 'data': task.to_dict()})
@@ -723,10 +736,68 @@ def complete_task(task_id):
     task.other_fee = data.get('other_fee', 0)
     task.actual_cost = task.actual_fuel_fee + task.actual_bridge_fee + task.actual_labor_fee + task.other_fee
     task.final_profit = task.rental_fee - task.actual_cost
+    task.remark = data.get('remark', '')
+    task.is_paid = data.get('is_paid', False)
+    paid_date = data.get('paid_date')
+    task.paid_date = datetime.strptime(paid_date, '%Y-%m-%d') if paid_date else None
+    task.paid_method = data.get('paid_method', '')
     task.status = 'completed'
 
     db.session.commit()
     return jsonify({'code': 200, 'msg': '任务已完成', 'data': task.to_dict()})
+
+
+@app.route('/api/tasks/<int:task_id>/cancel', methods=['POST'])
+@login_required
+def cancel_task(task_id):
+    """Cancel a task with a reason."""
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'code': 404, 'msg': '任务不存在'})
+    if task.status == 'completed':
+        return jsonify({'code': 400, 'msg': '已完成的任务不能取消'})
+    if task.status == 'cancelled':
+        return jsonify({'code': 400, 'msg': '任务已经是取消状态'})
+
+    data = request.get_json() or {}
+    reason = data.get('reason', '').strip()
+    if not reason:
+        return jsonify({'code': 400, 'msg': '请输入取消原因'})
+
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    task.add_changes(
+        [{'field': '任务状态', 'old_value': task.status, 'new_value': 'cancelled'},
+         {'field': '取消原因', 'old_value': '', 'new_value': reason}],
+        {'cancelled_at': now_str, 'cancel_reason': reason,
+         'client_name': task.client_name,
+         'departure': task.departure, 'destination': task.destination,
+         'departure_time': task.departure_time.strftime('%Y-%m-%d %H:%M') if task.departure_time else '',
+         'vehicle_type': task.vehicle_type or ''}
+    )
+    task.status = 'cancelled'
+
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '任务已取消', 'data': task.to_dict()})
+
+
+@app.route('/api/tasks/<int:task_id>/invoice', methods=['POST'])
+@login_required
+def save_invoice(task_id):
+    """Save invoice info for a completed task."""
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'code': 404, 'msg': '任务不存在'})
+
+    data = request.get_json() or {}
+    task.invoice_type = data.get('invoice_type', '')
+    task.invoice_no = data.get('invoice_no', '')
+    task.invoice_amount = data.get('invoice_amount', 0)
+    invoice_date = data.get('invoice_date')
+    task.invoice_date = datetime.strptime(invoice_date, '%Y-%m-%d') if invoice_date else None
+    task.invoice_remark = data.get('invoice_remark', '')
+
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '发票信息已保存', 'data': task.to_dict()})
 
 
 # ==================== Yunzhijia Approval ====================
@@ -859,6 +930,14 @@ def submit_approval():
 
     if not eligible:
         return jsonify({'code': 400, 'msg': '所选任务均已发起过审批或已通过，无法重复提交'})
+
+    # 大众司不走审批流程，自动跳过
+    skipped_dazhong = [t for t in eligible if (t.vehicle.company if t.vehicle else '') == '大众司']
+    if skipped_dazhong:
+        eligible = [t for t in eligible if t not in skipped_dazhong]
+
+    if not eligible:
+        return jsonify({'code': 400, 'msg': '所选任务均为大众司车辆，无需发起审批'})
 
     # 按车辆所属公司分组
     grouped = {}
@@ -998,7 +1077,7 @@ def yunzhijia_callback():
     if not data:
         try:
             data = json.loads(raw_data) if raw_data else {}
-        except:
+        except Exception:
             data = {}
     if not data:
         data = dict(request.args)
@@ -1466,7 +1545,7 @@ def repush_confirmation(confirmation_id):
     if snapshot:
         try:
             task_snapshot = json.loads(snapshot.snapshot_data)
-        except:
+        except Exception:
             pass
 
     confirm_page_url = f"{app.config.get('CONFIRM_BASE_URL', '')}/confirm/{confirmation.confirm_token}"
@@ -1552,7 +1631,7 @@ def get_confirm_page(token):
     if snapshot:
         try:
             task_info = json.loads(snapshot.snapshot_data)
-        except:
+        except Exception:
             pass
 
     return jsonify({
@@ -1761,13 +1840,15 @@ def init_db():
         db.session.execute(db.text("ALTER TABLE vehicles ADD COLUMN company VARCHAR(50) DEFAULT ''"))
         db.session.commit()
     except Exception:
-        db.session.rollback()  # 字段已存在则忽略
+        app.logger.debug("ALTER TABLE vehicles.company skipped (already exists)")
+        db.session.rollback()
 
     # 给 tasks 表增加 yzj_approval_status 字段（兼容旧库）
     try:
         db.session.execute(db.text("ALTER TABLE tasks ADD COLUMN yzj_approval_status VARCHAR(20) DEFAULT ''"))
         db.session.commit()
     except Exception:
+        app.logger.debug("ALTER TABLE tasks.yzj_approval_status skipped (already exists)")
         db.session.rollback()
 
     # 给 tasks 表增加审批实例相关字段
@@ -1782,6 +1863,7 @@ def init_db():
             db.session.execute(db.text(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}"))
             db.session.commit()
         except Exception:
+            app.logger.debug(f"ALTER TABLE tasks.{col} skipped (already exists)")
             db.session.rollback()
 
     # 给 schedule_confirmations 表增加 wx_openid 字段（兼容旧库）
@@ -1789,6 +1871,7 @@ def init_db():
         db.session.execute(db.text("ALTER TABLE schedule_confirmations ADD COLUMN wx_openid VARCHAR(64) DEFAULT ''"))
         db.session.commit()
     except Exception:
+        app.logger.debug("ALTER TABLE schedule_confirmations.wx_openid skipped (already exists)")
         db.session.rollback()
 
     # 给 client_contacts 表增加 wx_userid 字段（兼容旧库）
@@ -1796,6 +1879,7 @@ def init_db():
         db.session.execute(db.text("ALTER TABLE client_contacts ADD COLUMN wx_userid VARCHAR(64) DEFAULT ''"))
         db.session.commit()
     except Exception:
+        app.logger.debug("ALTER TABLE client_contacts.wx_userid skipped (already exists)")
         db.session.rollback()
 
     # 给 client_contacts 表增加 wx_sender 字段（兼容旧库）
@@ -1803,6 +1887,7 @@ def init_db():
         db.session.execute(db.text("ALTER TABLE client_contacts ADD COLUMN wx_sender VARCHAR(64) DEFAULT ''"))
         db.session.commit()
     except Exception:
+        app.logger.debug("ALTER TABLE client_contacts.wx_sender skipped (already exists)")
         db.session.rollback()
 
     # 给 schedule_confirmations 表增加 wx_sender 字段（兼容旧库）
@@ -1810,7 +1895,35 @@ def init_db():
         db.session.execute(db.text("ALTER TABLE schedule_confirmations ADD COLUMN wx_sender VARCHAR(64) DEFAULT ''"))
         db.session.commit()
     except Exception:
+        app.logger.debug("ALTER TABLE schedule_confirmations.wx_sender skipped (already exists)")
         db.session.rollback()
+
+    # 给 client_contacts 表增加 external_corp_name 字段（兼容旧库）
+    try:
+        db.session.execute(db.text("ALTER TABLE client_contacts ADD COLUMN external_corp_name VARCHAR(100) DEFAULT ''"))
+        db.session.commit()
+    except Exception:
+        app.logger.debug("ALTER TABLE client_contacts.external_corp_name skipped (already exists)")
+        db.session.rollback()
+
+    # 给 tasks 表增加收款相关字段（兼容旧库）
+    for col, typedef in [
+        ('remark', "TEXT"),
+        ('is_paid', "TINYINT(1) DEFAULT 0"),
+        ('paid_date', "DATETIME NULL"),
+        ('paid_method', "VARCHAR(20) DEFAULT ''"),
+        ('invoice_type', "VARCHAR(30) DEFAULT ''"),
+        ('invoice_no', "VARCHAR(50) DEFAULT ''"),
+        ('invoice_amount', "FLOAT DEFAULT 0"),
+        ('invoice_date', "DATETIME NULL"),
+        ('invoice_remark', "TEXT"),
+    ]:
+        try:
+            db.session.execute(db.text(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}"))
+            db.session.commit()
+        except Exception:
+            app.logger.debug(f"ALTER TABLE tasks.{col} skipped (already exists)")
+            db.session.rollback()
 
     # Create admin if not exists
     if not User.query.filter_by(username='admin').first():

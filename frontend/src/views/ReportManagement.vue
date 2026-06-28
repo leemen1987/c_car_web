@@ -34,6 +34,7 @@
             </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="queryByClient">查询</el-button>
+              <el-button type="success" @click="exportClient" :disabled="!clientTasks.length">导出Excel</el-button>
             </el-form-item>
           </el-form>
 
@@ -116,6 +117,7 @@
             </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="queryByDriver">查询</el-button>
+              <el-button type="success" @click="exportDriver" :disabled="!driverResults.length">导出Excel</el-button>
             </el-form-item>
           </el-form>
 
@@ -183,6 +185,7 @@
             </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="queryByVehicle">查询</el-button>
+              <el-button type="success" @click="exportVehicle" :disabled="!vehicleResults.length">导出Excel</el-button>
             </el-form-item>
           </el-form>
 
@@ -240,6 +243,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../utils/api'
+import * as XLSX from 'xlsx'
 
 const activeTab = ref('client')
 
@@ -301,6 +305,71 @@ const queryByVehicle = async () => {
     const res = await api.get('/reports/by-vehicle', { params })
     vehicleResults.value = res.data
   } catch (e) {}
+}
+
+const statusMap = { completed: '已完成', scheduled: '已排班', pending: '待排班', cancelled: '已取消' }
+const confirmMap = { confirmed: '已确认', rejected: '已拒绝', pending: '待确认' }
+
+const exportToExcel = (rows, columns, filename) => {
+  const data = rows.map(r => columns.map(c => c.formatter ? c.formatter(r) : r[c.prop] ?? ''))
+  const ws = XLSX.utils.aoa_to_sheet([columns.map(c => c.label), ...data])
+  ws['!cols'] = columns.map(c => ({ wch: c.width || 15 }))
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+  XLSX.writeFile(wb, filename + '.xlsx')
+  ElMessage.success('导出成功')
+}
+
+const exportClient = () => {
+  const cols = [
+    { label: '包车类型', formatter: r => r.client_type === 'company' ? '单位' : '个人', width: 10 },
+    { label: '用车单位', formatter: r => r.client_type === 'company' ? (r.client_company || r.client_name) : r.client_name, width: 15 },
+    { label: '联系人', prop: 'contact_name', width: 10 },
+    { label: '确认情况', formatter: r => confirmMap[r.schedule_confirm_status] || '-', width: 10 },
+    { label: '出发地点', prop: 'departure', width: 12 },
+    { label: '目的地', prop: 'destination', width: 12 },
+    { label: '车牌号', prop: 'vehicle_plate', width: 10 },
+    { label: '司机', prop: 'driver_name', width: 10 },
+    { label: '出车时间', prop: 'departure_time', width: 18 },
+    { label: '租车费', prop: 'rental_fee', width: 10 },
+    { label: '实际成本', prop: 'actual_cost', width: 10 },
+    { label: '最终利润', prop: 'final_profit', width: 10 },
+    { label: '状态', formatter: r => statusMap[r.status] || r.status, width: 10 },
+  ]
+  exportToExcel(clientTasks.value, cols, '按用车单位报表')
+}
+
+const exportDriver = () => {
+  const cols = [
+    { label: '包车类型', formatter: r => r.client_type === 'company' ? '单位' : '个人', width: 10 },
+    { label: '用车单位', formatter: r => r.client_type === 'company' ? (r.client_company || r.client_name) : r.client_name, width: 15 },
+    { label: '联系人', prop: 'contact_name', width: 10 },
+    { label: '出发', prop: 'departure', width: 12 },
+    { label: '目的', prop: 'destination', width: 12 },
+    { label: '出车时间', prop: 'departure_time', width: 18 },
+    { label: '预估人工费', prop: 'labor_fee', width: 12 },
+    { label: '实际人工费', prop: 'actual_labor_fee', width: 12 },
+  ]
+  const allRows = driverResults.value.flatMap(ds => ds.tasks.map(t => ({ ...t, _driver: ds.driver_name })))
+  const driverCols = [{ label: '司机', formatter: r => r._driver, width: 10 }, ...cols]
+  exportToExcel(allRows, driverCols, '按司机报表')
+}
+
+const exportVehicle = () => {
+  const cols = [
+    { label: '包车类型', formatter: r => r.client_type === 'company' ? '单位' : '个人', width: 10 },
+    { label: '用车单位', formatter: r => r.client_type === 'company' ? (r.client_company || r.client_name) : r.client_name, width: 15 },
+    { label: '联系人', prop: 'contact_name', width: 10 },
+    { label: '出发', prop: 'departure', width: 12 },
+    { label: '目的', prop: 'destination', width: 12 },
+    { label: '出车时间', prop: 'departure_time', width: 18 },
+    { label: '租车费', prop: 'rental_fee', width: 10 },
+    { label: '实际成本', prop: 'actual_cost', width: 10 },
+    { label: '最终利润', prop: 'final_profit', width: 10 },
+  ]
+  const allRows = vehicleResults.value.flatMap(vs => vs.tasks.map(t => ({ ...t, _plate: vs.plate_number })))
+  const vehicleCols = [{ label: '车牌号', formatter: r => r._plate, width: 12 }, ...cols]
+  exportToExcel(allRows, vehicleCols, '按车辆报表')
 }
 
 onMounted(async () => {
