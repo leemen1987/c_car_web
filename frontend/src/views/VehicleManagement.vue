@@ -7,15 +7,21 @@
             <el-icon :size="20"><Van /></el-icon>
             <span>车辆管理</span>
           </div>
-          <el-button type="primary" @click="showAdd">
-            <el-icon><Plus /></el-icon>
-            <span style="margin-left:4px">添加车辆</span>
-          </el-button>
+          <div style="display:flex;gap:8px">
+            <el-button type="success" @click="showCompanyManage">
+              <el-icon><OfficeBuilding /></el-icon>
+              <span style="margin-left:4px">车属单位管理</span>
+            </el-button>
+            <el-button type="primary" @click="showAdd">
+              <el-icon><Plus /></el-icon>
+              <span style="margin-left:4px">添加车辆</span>
+            </el-button>
+          </div>
         </div>
       </template>
 
       <el-table :data="vehicles" stripe style="width:100%">
-        <el-table-column prop="id" label="ID" width="60" align="center" />
+        <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="plate_number" label="车牌号" min-width="120" />
         <el-table-column prop="vehicle_type" label="车辆类型" min-width="140" />
         <el-table-column prop="company" label="所属公司" min-width="100" />
@@ -40,6 +46,7 @@
       </el-table>
     </el-card>
 
+    <!-- 添加/编辑车辆弹窗 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑车辆' : '添加车辆'" width="450px">
       <el-form :model="form" label-width="80px">
         <el-form-item label="车牌号">
@@ -49,11 +56,8 @@
           <el-input v-model="form.vehicle_type" placeholder="请输入车辆类型" />
         </el-form-item>
         <el-form-item label="所属公司">
-          <el-select v-model="form.company" placeholder="请选择所属公司" style="width:100%">
-            <el-option label="国顺司" value="国顺司" />
-            <el-option label="国开司" value="国开司" />
-            <el-option label="大众司" value="大众司" />
-            <el-option label="外单位" value="外单位" />
+          <el-select v-model="form.company" placeholder="请选择所属公司" style="width:100%" filterable allow-create>
+            <el-option v-for="c in companies" :key="c.id" :label="c.name" :value="c.name" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -69,6 +73,51 @@
         <el-button type="primary" @click="submitForm">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 车属单位管理弹窗 -->
+    <el-dialog v-model="companyDialogVisible" title="车属单位管理" width="650px">
+      <div style="margin-bottom:12px">
+        <el-button type="primary" size="small" @click="showAddCompany">新增车属单位</el-button>
+      </div>
+      <el-table :data="companies" border stripe size="small">
+        <el-table-column prop="name" label="单位名称" min-width="100" />
+        <el-table-column prop="contact_person" label="联系人" min-width="80" />
+        <el-table-column prop="phone" label="手机号码" min-width="110" />
+        <el-table-column prop="address" label="单位地址" min-width="140" />
+        <el-table-column label="操作" width="140" align="center">
+          <template #default="{ row }">
+            <el-button type="primary" size="small" @click="showEditCompany(row)">编辑</el-button>
+            <el-popconfirm title="确认删除?" @confirm="deleteCompany(row.id)">
+              <template #reference>
+                <el-button type="danger" size="small">删除</el-button>
+              </template>
+            </el-popconfirm>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
+    <!-- 新增/编辑车属单位弹窗 -->
+    <el-dialog v-model="companyFormVisible" :title="isEditCompany ? '编辑车属单位' : '新增车属单位'" width="450px">
+      <el-form :model="companyForm" label-width="80px">
+        <el-form-item label="单位名称">
+          <el-input v-model="companyForm.name" />
+        </el-form-item>
+        <el-form-item label="联系人">
+          <el-input v-model="companyForm.contact_person" />
+        </el-form-item>
+        <el-form-item label="手机号码">
+          <el-input v-model="companyForm.phone" />
+        </el-form-item>
+        <el-form-item label="单位地址">
+          <el-input v-model="companyForm.address" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="companyFormVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitCompanyForm">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -78,13 +127,24 @@ import { ElMessage } from 'element-plus'
 import api from '../utils/api'
 
 const vehicles = ref([])
+const companies = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
 const form = ref({ plate_number: '', vehicle_type: '', company: '', status: 'available' })
 
+const companyDialogVisible = ref(false)
+const companyFormVisible = ref(false)
+const isEditCompany = ref(false)
+const editCompanyId = ref(null)
+const companyForm = ref({ name: '', contact_person: '', phone: '', address: '' })
+
 const loadData = async () => {
   try { const res = await api.get('/vehicles'); vehicles.value = res.data } catch (e) {}
+}
+
+const loadCompanies = async () => {
+  try { const res = await api.get('/vehicle-companies'); companies.value = res.data } catch (e) {}
 }
 
 const showAdd = () => { isEdit.value = false; form.value = { plate_number: '', vehicle_type: '', company: '', status: 'available' }; dialogVisible.value = true }
@@ -97,6 +157,7 @@ const submitForm = async () => {
     ElMessage.success('操作成功')
     dialogVisible.value = false
     loadData()
+    loadCompanies()
   } catch (e) {}
 }
 
@@ -104,5 +165,39 @@ const handleDelete = async (id) => {
   try { await api.delete(`/vehicles/${id}`); ElMessage.success('删除成功'); loadData() } catch (e) {}
 }
 
-onMounted(loadData)
+const showCompanyManage = () => { companyDialogVisible.value = true }
+
+const showAddCompany = () => {
+  isEditCompany.value = false
+  companyForm.value = { name: '', contact_person: '', phone: '', address: '' }
+  companyFormVisible.value = true
+}
+
+const showEditCompany = (row) => {
+  isEditCompany.value = true
+  editCompanyId.value = row.id
+  companyForm.value = { name: row.name, contact_person: row.contact_person || '', phone: row.phone || '', address: row.address || '' }
+  companyFormVisible.value = true
+}
+
+const submitCompanyForm = async () => {
+  if (!companyForm.value.name.trim()) { ElMessage.warning('请输入单位名称'); return }
+  try {
+    if (isEditCompany.value) {
+      await api.put(`/vehicle-companies/${editCompanyId.value}`, companyForm.value)
+    } else {
+      await api.post('/vehicle-companies', companyForm.value)
+    }
+    ElMessage.success('操作成功')
+    companyFormVisible.value = false
+    loadCompanies()
+    loadData()
+  } catch (e) {}
+}
+
+const deleteCompany = async (id) => {
+  try { await api.delete(`/vehicle-companies/${id}`); ElMessage.success('删除成功'); loadCompanies() } catch (e) {}
+}
+
+onMounted(() => { loadData(); loadCompanies() })
 </script>

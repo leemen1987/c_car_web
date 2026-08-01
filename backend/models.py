@@ -51,6 +51,27 @@ class Driver(db.Model):
         }
 
 
+class VehicleCompany(db.Model):
+    """车属单位"""
+    __tablename__ = 'vehicle_companies'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)  # 单位名称
+    contact_person = db.Column(db.String(50), default='')  # 联系人
+    phone = db.Column(db.String(20), default='')  # 手机号码
+    address = db.Column(db.String(200), default='')  # 单位地址
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'contact_person': self.contact_person or '',
+            'phone': self.phone or '',
+            'address': self.address or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
+        }
+
+
 class Vehicle(db.Model):
     __tablename__ = 'vehicles'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -355,5 +376,86 @@ class ConfirmationSnapshot(db.Model):
             'confirmation_id': self.confirmation_id,
             'snapshot_type': self.snapshot_type,
             'snapshot_data': self.snapshot_data,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
+        }
+
+
+class LongRentalContract(db.Model):
+    """长租合同"""
+    __tablename__ = 'long_rental_contracts'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    contract_no = db.Column(db.String(50), unique=True, default='')
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
+    client_name = db.Column(db.String(100), default='')
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True)
+    driver_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=True)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=True)
+    monthly_rental_fee = db.Column(db.Float, default=0)
+    remark = db.Column(db.Text, default='')
+    status = db.Column(db.String(20), default='active')  # active / expired / terminated
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    client = db.relationship('Client', backref='long_contracts')
+    vehicle = db.relationship('Vehicle', backref='long_contracts')
+    driver = db.relationship('Driver', backref='long_contracts')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'contract_no': self.contract_no or '',
+            'client_id': self.client_id,
+            'client_name': self.client.name if self.client else self.client_name,
+            'vehicle_id': self.vehicle_id,
+            'vehicle_plate': self.vehicle.plate_number if self.vehicle else '',
+            'vehicle_type': self.vehicle.vehicle_type if self.vehicle else '',
+            'driver_id': self.driver_id,
+            'driver_name': self.driver.name if self.driver else '',
+            'driver_phone': self.driver.phone if self.driver else '',
+            'start_date': self.start_date.strftime('%Y-%m-%d') if self.start_date else '',
+            'end_date': self.end_date.strftime('%Y-%m-%d') if self.end_date else '',
+            'monthly_rental_fee': self.monthly_rental_fee,
+            'remark': self.remark or '',
+            'status': self.status,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None,
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None
+        }
+
+
+class LongRentalBill(db.Model):
+    """长租月度账单"""
+    __tablename__ = 'long_rental_bills'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    contract_id = db.Column(db.Integer, db.ForeignKey('long_rental_contracts.id'), nullable=False)
+    bill_month = db.Column(db.String(7), nullable=False)  # 格式 2026-06
+    rental_fee = db.Column(db.Float, default=0)
+    fuel_fee = db.Column(db.Float, default=0)
+    bridge_fee = db.Column(db.Float, default=0)
+    other_fee = db.Column(db.Float, default=0)
+    total_amount = db.Column(db.Float, default=0)
+    is_paid = db.Column(db.Boolean, default=False)
+    paid_date = db.Column(db.Date, nullable=True)
+    paid_method = db.Column(db.String(20), default='')
+    remark = db.Column(db.Text, default='')
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    contract = db.relationship('LongRentalContract', backref='bills')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'contract_id': self.contract_id,
+            'bill_month': self.bill_month,
+            'rental_fee': self.rental_fee,
+            'fuel_fee': self.fuel_fee,
+            'bridge_fee': self.bridge_fee,
+            'other_fee': self.other_fee,
+            'total_amount': self.total_amount,
+            'is_paid': self.is_paid,
+            'paid_date': self.paid_date.strftime('%Y-%m-%d') if self.paid_date else None,
+            'paid_method': self.paid_method or '',
+            'remark': self.remark or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
         }

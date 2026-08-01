@@ -15,7 +15,8 @@ const routes = [
       { path: 'vehicles', name: 'Vehicles', component: () => import('../views/VehicleManagement.vue'), meta: { permission: 'vehicle' } },
       { path: 'labor-rates', name: 'LaborRates', component: () => import('../views/LaborRateManagement.vue'), meta: { permission: 'labor_rate' } },
       { path: 'clients', name: 'Clients', component: () => import('../views/ClientManagement.vue'), meta: { permission: 'client' } },
-      { path: 'confirmations', name: 'Confirmations', component: () => import('../views/ConfirmationManagement.vue'), meta: { permission: 'task' } }
+      { path: 'confirmations', name: 'Confirmations', component: () => import('../views/ConfirmationManagement.vue'), meta: { permission: 'task' } },
+      { path: 'long-rental', name: 'LongRental', component: () => import('../views/LongRentalManagement.vue'), meta: { permission: 'task' } }
     ]
   }
 ]

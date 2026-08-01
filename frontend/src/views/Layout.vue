@@ -12,6 +12,10 @@
           <el-icon><CircleCheck /></el-icon>
           <span>客户确认</span>
         </el-menu-item>
+        <el-menu-item index="/long-rental" v-if="hasPermission('task')">
+          <el-icon><Calendar /></el-icon>
+          <span>长租管理</span>
+        </el-menu-item>
         <el-menu-item index="/drivers" v-if="hasPermission('driver')">
           <el-icon><User /></el-icon>
           <span>司机管理</span>
@@ -50,6 +54,10 @@
         <el-menu-item index="/confirmations" v-if="hasPermission('task')">
           <el-icon><CircleCheck /></el-icon>
           <span>客户确认</span>
+        </el-menu-item>
+        <el-menu-item index="/long-rental" v-if="hasPermission('task')">
+          <el-icon><Calendar /></el-icon>
+          <span>长租管理</span>
         </el-menu-item>
         <el-menu-item index="/drivers" v-if="hasPermission('driver')">
           <el-icon><User /></el-icon>

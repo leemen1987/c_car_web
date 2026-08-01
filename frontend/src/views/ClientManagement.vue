@@ -15,7 +15,7 @@
       </template>
 
       <el-table :data="clients" stripe style="width:100%">
-        <el-table-column prop="id" label="ID" width="60" align="center" />
+        <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="name" label="单位名称" min-width="160" />
         <el-table-column prop="address" label="地址" min-width="200" />
         <el-table-column label="联系人" min-width="200">

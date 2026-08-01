@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, session, redirect
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
-from models import db, User, Driver, Vehicle, Task, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot
+from models import db, User, Driver, Vehicle, VehicleCompany, Task, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot, LongRentalContract, LongRentalBill
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 from functools import wraps
@@ -274,6 +274,246 @@ def delete_vehicle(vehicle_id):
     if not vehicle:
         return jsonify({'code': 404, 'msg': '车辆不存在'})
     db.session.delete(vehicle)
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '删除成功'})
+
+
+# ==================== Vehicle Companies ====================
+
+@app.route('/api/vehicle-companies', methods=['GET'])
+@login_required
+def list_vehicle_companies():
+    companies = VehicleCompany.query.order_by(VehicleCompany.id).all()
+    return jsonify({'code': 200, 'data': [c.to_dict() for c in companies]})
+
+
+@app.route('/api/vehicle-companies', methods=['POST'])
+@login_required
+def create_vehicle_company():
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({'code': 400, 'msg': '请输入单位名称'})
+    if VehicleCompany.query.filter_by(name=name).first():
+        return jsonify({'code': 400, 'msg': '单位名称已存在'})
+    company = VehicleCompany(
+        name=name,
+        contact_person=data.get('contact_person', ''),
+        phone=data.get('phone', ''),
+        address=data.get('address', '')
+    )
+    db.session.add(company)
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '创建成功', 'data': company.to_dict()})
+
+
+@app.route('/api/vehicle-companies/<int:company_id>', methods=['PUT'])
+@login_required
+def update_vehicle_company(company_id):
+    company = VehicleCompany.query.get(company_id)
+    if not company:
+        return jsonify({'code': 404, 'msg': '单位不存在'})
+    data = request.get_json()
+    old_name = company.name
+    company.name = data.get('name', company.name).strip()
+    company.contact_person = data.get('contact_person', company.contact_person)
+    company.phone = data.get('phone', company.phone)
+    company.address = data.get('address', company.address)
+    # 同步更新车辆表中的公司名
+    if old_name != company.name:
+        Vehicle.query.filter_by(company=old_name).update({'company': company.name})
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '更新成功', 'data': company.to_dict()})
+
+
+@app.route('/api/vehicle-companies/<int:company_id>', methods=['DELETE'])
+@login_required
+def delete_vehicle_company(company_id):
+    company = VehicleCompany.query.get(company_id)
+    if not company:
+        return jsonify({'code': 404, 'msg': '单位不存在'})
+    db.session.delete(company)
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '删除成功'})
+
+
+# ==================== Long Rental Contracts ====================
+
+def generate_contract_no():
+    """生成合同编号 CZHT-YYYYMMDD-NNN"""
+    today = datetime.now().strftime('%Y%m%d')
+    prefix = f'CZHT-{today}-'
+    last = LongRentalContract.query.filter(
+        LongRentalContract.contract_no.like(f'{prefix}%')
+    ).order_by(LongRentalContract.id.desc()).first()
+    if last:
+        seq = int(last.contract_no.split('-')[-1]) + 1
+    else:
+        seq = 1
+    return f'{prefix}{seq:03d}'
+
+
+@app.route('/api/long-rental-contracts', methods=['GET'])
+@login_required
+def list_long_rental_contracts():
+    status = request.args.get('status', '')
+    q = LongRentalContract.query
+    if status:
+        q = q.filter_by(status=status)
+    contracts = q.order_by(LongRentalContract.id.desc()).all()
+    result = []
+    for c in contracts:
+        d = c.to_dict()
+        paid_total = sum(b.total_amount for b in c.bills if b.is_paid)
+        unpaid_total = sum(b.total_amount for b in c.bills if not b.is_paid)
+        d['paid_total'] = paid_total
+        d['unpaid_total'] = unpaid_total
+        d['bill_count'] = len(c.bills)
+        result.append(d)
+    return jsonify({'code': 200, 'data': result})
+
+
+@app.route('/api/long-rental-contracts', methods=['POST'])
+@login_required
+def create_long_rental_contract():
+    data = request.get_json()
+    client_id = data.get('client_id')
+    client = Client.query.get(client_id) if client_id else None
+    contract = LongRentalContract(
+        contract_no=generate_contract_no(),
+        client_id=client_id,
+        client_name=client.name if client else data.get('client_name', ''),
+        vehicle_id=data.get('vehicle_id'),
+        driver_id=data.get('driver_id'),
+        start_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date() if data.get('start_date') else datetime.now().date(),
+        end_date=datetime.strptime(data['end_date'], '%Y-%m-%d').date() if data.get('end_date') else None,
+        monthly_rental_fee=data.get('monthly_rental_fee', 0),
+        remark=data.get('remark', ''),
+        status='active'
+    )
+    db.session.add(contract)
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '创建成功', 'data': contract.to_dict()})
+
+
+@app.route('/api/long-rental-contracts/<int:contract_id>', methods=['PUT'])
+@login_required
+def update_long_rental_contract(contract_id):
+    contract = LongRentalContract.query.get(contract_id)
+    if not contract:
+        return jsonify({'code': 404, 'msg': '合同不存在'})
+    data = request.get_json()
+    if 'client_id' in data:
+        client = Client.query.get(data['client_id'])
+        contract.client_id = data['client_id']
+        contract.client_name = client.name if client else ''
+    if 'vehicle_id' in data:
+        contract.vehicle_id = data['vehicle_id']
+    if 'driver_id' in data:
+        contract.driver_id = data['driver_id']
+    if 'start_date' in data and data['start_date']:
+        contract.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+    if 'end_date' in data:
+        contract.end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date() if data['end_date'] else None
+    if 'monthly_rental_fee' in data:
+        contract.monthly_rental_fee = data['monthly_rental_fee']
+    if 'remark' in data:
+        contract.remark = data['remark']
+    if 'status' in data:
+        contract.status = data['status']
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '更新成功', 'data': contract.to_dict()})
+
+
+@app.route('/api/long-rental-contracts/<int:contract_id>', methods=['DELETE'])
+@login_required
+def delete_long_rental_contract(contract_id):
+    contract = LongRentalContract.query.get(contract_id)
+    if not contract:
+        return jsonify({'code': 404, 'msg': '合同不存在'})
+    LongRentalBill.query.filter_by(contract_id=contract_id).delete()
+    db.session.delete(contract)
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '删除成功'})
+
+
+# ==================== Long Rental Bills ====================
+
+@app.route('/api/long-rental-contracts/<int:contract_id>/bills', methods=['GET'])
+@login_required
+def list_long_rental_bills(contract_id):
+    contract = LongRentalContract.query.get(contract_id)
+    if not contract:
+        return jsonify({'code': 404, 'msg': '合同不存在'})
+    bills = LongRentalBill.query.filter_by(contract_id=contract_id).order_by(LongRentalBill.bill_month.desc()).all()
+    return jsonify({'code': 200, 'data': [b.to_dict() for b in bills]})
+
+
+@app.route('/api/long-rental-contracts/<int:contract_id>/bills', methods=['POST'])
+@login_required
+def create_long_rental_bill(contract_id):
+    contract = LongRentalContract.query.get(contract_id)
+    if not contract:
+        return jsonify({'code': 404, 'msg': '合同不存在'})
+    data = request.get_json()
+    bill_month = data.get('bill_month', '')
+    if not bill_month:
+        return jsonify({'code': 400, 'msg': '请选择账单月份'})
+    existing = LongRentalBill.query.filter_by(contract_id=contract_id, bill_month=bill_month).first()
+    if existing:
+        return jsonify({'code': 400, 'msg': f'{bill_month} 月份账单已存在'})
+    rental_fee = data.get('rental_fee', contract.monthly_rental_fee)
+    fuel_fee = data.get('fuel_fee', 0)
+    bridge_fee = data.get('bridge_fee', 0)
+    other_fee = data.get('other_fee', 0)
+    bill = LongRentalBill(
+        contract_id=contract_id,
+        bill_month=bill_month,
+        rental_fee=rental_fee,
+        fuel_fee=fuel_fee,
+        bridge_fee=bridge_fee,
+        other_fee=other_fee,
+        total_amount=rental_fee + fuel_fee + bridge_fee + other_fee,
+        is_paid=data.get('is_paid', False),
+        paid_date=datetime.strptime(data['paid_date'], '%Y-%m-%d').date() if data.get('paid_date') else None,
+        paid_method=data.get('paid_method', ''),
+        remark=data.get('remark', '')
+    )
+    db.session.add(bill)
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '创建成功', 'data': bill.to_dict()})
+
+
+@app.route('/api/long-rental-bills/<int:bill_id>', methods=['PUT'])
+@login_required
+def update_long_rental_bill(bill_id):
+    bill = LongRentalBill.query.get(bill_id)
+    if not bill:
+        return jsonify({'code': 404, 'msg': '账单不存在'})
+    data = request.get_json()
+    for field in ['rental_fee', 'fuel_fee', 'bridge_fee', 'other_fee']:
+        if field in data:
+            setattr(bill, field, data[field])
+    bill.total_amount = bill.rental_fee + bill.fuel_fee + bill.bridge_fee + bill.other_fee
+    if 'is_paid' in data:
+        bill.is_paid = data['is_paid']
+    if 'paid_date' in data:
+        bill.paid_date = datetime.strptime(data['paid_date'], '%Y-%m-%d').date() if data['paid_date'] else None
+    if 'paid_method' in data:
+        bill.paid_method = data['paid_method']
+    if 'remark' in data:
+        bill.remark = data['remark']
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '更新成功', 'data': bill.to_dict()})
+
+
+@app.route('/api/long-rental-bills/<int:bill_id>', methods=['DELETE'])
+@login_required
+def delete_long_rental_bill(bill_id):
+    bill = LongRentalBill.query.get(bill_id)
+    if not bill:
+        return jsonify({'code': 404, 'msg': '账单不存在'})
+    db.session.delete(bill)
     db.session.commit()
     return jsonify({'code': 200, 'msg': '删除成功'})
 
@@ -1834,6 +2074,14 @@ def list_confirmations():
 def init_db():
     """Initialize database tables and create admin user."""
     db.create_all()
+
+    # 初始化车属单位表（从现有车辆数据中提取公司名）
+    if VehicleCompany.query.count() == 0:
+        existing_companies = db.session.query(Vehicle.company).distinct().all()
+        for (name,) in existing_companies:
+            if name:
+                db.session.add(VehicleCompany(name=name))
+        db.session.commit()
 
     # 给 vehicles 表增加 company 字段（兼容旧库）
     try:

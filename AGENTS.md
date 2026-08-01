@@ -57,6 +57,12 @@ Note: vite.config.js is the single source of truth for frontend port. Do not add
 - **云之家 (Yunzhijia)**: Approval workflow. Template IDs in `_APPROVAL_TEMPLATE_MAP` keyed by vehicle company (`国顺司`, `国开司`, `外单位`). Callback at `/api/yunzhijia/callback` with AES-ECB decryption.
 - **企业微信 (WeChat Work)**: Schedule confirmation messaging. `backend/utils/wx_work.py` wraps the API. External contacts (wx_userid starting with `wm`) require manual link sharing — no direct message API support.
 
+## Security Notes
+
+- Vite dev server binds to `127.0.0.1` only — never expose it directly to the internet.
+- CVE-2025-30208 (Vite arbitrary file read) was fixed in Vite 5.4.18; current version 5.4.21 is safe.
+- Keep Vite updated: `cd frontend && npm update`.
+
 ## Key Patterns
 
 - All API responses follow `{code: 200, data: ..., msg: ...}`. Frontend axios interceptor (`frontend/src/utils/api.js`) rejects non-200 codes.

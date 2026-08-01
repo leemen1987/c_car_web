@@ -21,3 +21,7 @@ Thumbs.db
 
 # 敏感信息
 *.secret
+bug1.docx
+
+# 工具目录
+.mimocode/
