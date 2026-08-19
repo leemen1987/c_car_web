@@ -1068,10 +1068,10 @@ const onLocationChange = async () => {
     tollLoading.value = true
     const res = await api.get('/estimate-toll', { params: { departure: dep, destination: dest } })
     if (res.code === 200 && res.data) {
-      taskForm.value.bridge_fee = res.data.tolls
-      taskForm.value.mileage = Math.round(res.data.distance * 1.1 * 10) / 10
+      taskForm.value.bridge_fee = res.data.tolls * 2
+      taskForm.value.mileage = Math.round(res.data.distance * 2 * 1.1 * 10) / 10
       recalcFuelFee()
-      ElMessage.success(`过路费预估：${res.data.tolls}元（${res.data.distance}km，约${res.data.duration}分钟）`)
+      ElMessage.success(`预估：过路费${taskForm.value.bridge_fee}元，里程${taskForm.value.mileage}km（来回含10%余量）`)
     }
   } catch (e) {
     // 静默失败，不打扰用户
