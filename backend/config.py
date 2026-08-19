@@ -31,3 +31,6 @@ class Config:
 
     # 确认页面域名（公网访问地址）
     CONFIRM_BASE_URL = os.environ.get('CONFIRM_BASE_URL', 'http://www.dzcz.top:8008')
+
+    # 高德地图 Web服务API Key
+    AMAP_KEY = '697542279ab323f467bb0407782b4cf6'

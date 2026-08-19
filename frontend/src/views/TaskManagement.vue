@@ -3,17 +3,37 @@
     <el-card>
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:18px;font-weight:bold">任务管理</span>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:18px;font-weight:bold">任务管理</span>
+            <el-select v-model="statusFilter" style="width:120px" size="default">
+              <el-option label="默认" value="" />
+              <el-option label="全部" value="all" />
+              <el-option label="待排班" value="pending" />
+              <el-option label="已排班" value="scheduled" />
+              <el-option label="已完成" value="completed" />
+              <el-option label="已取消" value="cancelled" />
+            </el-select>
+            <span style="color:#909399;font-size:13px">共 {{ filteredTasks.length }} 条</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
             <el-button type="success" @click="showApprovalDialog">发起审批</el-button>
             <el-button type="primary" @click="showAddDialog">录入任务</el-button>
+            <el-button @click="showSettings">设置</el-button>
           </div>
         </div>
       </template>
 
       <!-- Desktop table -->
-      <el-table v-if="!isMobile" :data="tasks" border stripe style="width:100%" max-height="600" :header-cell-style="{ whiteSpace: 'nowrap' }">
+      <el-table v-if="!isMobile" :data="filteredTasks" border stripe style="width:100%" max-height="600" :header-cell-style="{ whiteSpace: 'nowrap' }">
         <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column label="状态" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.status === 'pending'" type="warning">待排班</el-tag>
+            <el-tag v-else-if="row.status === 'scheduled'" type="primary">已排班</el-tag>
+            <el-tag v-else-if="row.status === 'completed'" type="success">已完成</el-tag>
+            <el-tag v-else-if="row.status === 'cancelled'" type="danger">已取消</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="用车方" min-width="120">
           <template #default="{ row }">
             <span v-if="row.client_type === 'company'" style="font-weight:600">{{ row.client_company }}</span>
@@ -49,7 +69,7 @@
         <el-table-column prop="departure_time" label="出车时间" min-width="140" />
         <el-table-column prop="return_time" label="回程时间" min-width="140" />
         <el-table-column prop="rental_days" label="天数" width="70" align="center" />
-        <el-table-column prop="vehicle_type" label="车辆类型" min-width="100" />
+        <el-table-column prop="vehicle_type" label="核定载人数" min-width="100" />
         <el-table-column prop="mileage" label="里程(km)" width="90" align="right" />
         <el-table-column prop="rental_fee" label="租车费(元)" width="100" align="right" />
         <el-table-column prop="fuel_fee" label="油电费" width="110" align="right" />
@@ -69,14 +89,6 @@
         <el-table-column prop="final_profit" label="最终利润" width="100" align="right">
           <template #default="{ row }">
             <span :style="{ color: row.final_profit >= 0 ? '#67c23a' : '#f56c6c' }">{{ row.final_profit }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="90" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.status === 'pending'" type="warning">待排班</el-tag>
-            <el-tag v-else-if="row.status === 'scheduled'" type="primary">已排班</el-tag>
-            <el-tag v-else-if="row.status === 'completed'" type="success">已完成</el-tag>
-            <el-tag v-else-if="row.status === 'cancelled'" type="danger">已取消</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="审批" width="160" align="center">
@@ -105,6 +117,16 @@
             <span v-else style="color:#c0c4cc">-</span>
           </template>
         </el-table-column>
+        <el-table-column label="收款" width="120" align="center">
+          <template #default="{ row }">
+            <template v-if="row.status === 'completed'">
+              <el-tag v-if="row.is_paid" type="success" size="small">已收款</el-tag>
+              <el-tag v-else type="danger" size="small">未收款</el-tag>
+              <div v-if="row.is_paid && row.paid_date" style="font-size:11px;color:#909399;margin-top:2px">{{ row.paid_date }} {{ row.paid_method || '' }}</div>
+            </template>
+            <span v-else style="color:#c0c4cc">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <div style="display:flex;flex-wrap:nowrap;gap:4px;justify-content:center;align-items:center">
@@ -123,11 +145,7 @@
                     <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled' && row.change_log && row.change_log.length" @click="showChangeLog(row)">变更记录</el-dropdown-item>
                     <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled'" @click="showEditDialog(row)">编辑</el-dropdown-item>
                     <el-dropdown-item divided>
-                      <el-popconfirm title="确认删除?" @confirm="deleteTask(row.id)">
-                        <template #reference>
-                          <span style="color:#f56c6c;width:100%;display:block">删除</span>
-                        </template>
-                      </el-popconfirm>
+                      <span style="color:#f56c6c;width:100%;display:block" @click="confirmDelete(row.id)">删除</span>
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -139,7 +157,7 @@
 
       <!-- Mobile card list -->
       <div v-else class="mobile-task-list">
-        <div v-for="row in tasks" :key="row.id" class="mobile-task-card">
+        <div v-for="row in filteredTasks" :key="row.id" class="mobile-task-card">
           <div class="card-header">
             <span class="card-client">
               <template v-if="row.client_type === 'company'">{{ row.client_company }} ({{ row.client_name }} {{ row.client_phone }})</template>
@@ -210,18 +228,14 @@
                   <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled'" @click="showEditDialog(row)">编辑</el-dropdown-item>
                   <el-dropdown-item v-if="row.change_log && row.change_log.length" @click="showChangeLog(row)">变更记录</el-dropdown-item>
                   <el-dropdown-item divided>
-                    <el-popconfirm title="确认删除?" @confirm="deleteTask(row.id)">
-                      <template #reference>
-                        <span style="color:#f56c6c;width:100%;display:block">删除</span>
-                      </template>
-                    </el-popconfirm>
+                    <span style="color:#f56c6c;width:100%;display:block" @click="confirmDelete(row.id)">删除</span>
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
           </div>
         </div>
-        <el-empty v-if="!tasks.length" description="暂无任务" />
+        <el-empty v-if="!filteredTasks.length" description="暂无任务" />
       </div>
     </el-card>
 
@@ -268,8 +282,8 @@
         </el-row>
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
-            <el-form-item label="车辆类型">
-              <el-select v-model="taskForm.vehicle_type" placeholder="请选择或输入" style="width:100%" filterable allow-create>
+            <el-form-item label="核定载人数">
+              <el-select v-model="taskForm.vehicle_type" placeholder="请选择核定载人数" style="width:100%" filterable allow-create @change="onCapacityChange">
                 <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
               </el-select>
             </el-form-item>
@@ -278,12 +292,12 @@
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="出发地点">
-              <el-input v-model="taskForm.departure" />
+              <el-input v-model="taskForm.departure" @blur="onLocationChange" />
             </el-form-item>
           </el-col>
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="目的地">
-              <el-input v-model="taskForm.destination" />
+              <el-input v-model="taskForm.destination" @blur="onLocationChange" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -309,7 +323,7 @@
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="任务里程(km)">
-              <el-input-number v-model="taskForm.mileage" :min="0" :precision="1" style="width:100%" />
+              <el-input-number v-model="taskForm.mileage" :min="0" :precision="1" style="width:100%" @change="onMileageChange" />
             </el-form-item>
           </el-col>
           <el-col :span="isMobile ? 24 : 12">
@@ -384,7 +398,7 @@
         </el-form-item>
         <el-form-item label="选择车辆">
           <el-select v-model="scheduleForm.vehicle_id" placeholder="请选择车辆" style="width:100%">
-            <el-option v-for="v in scheduleInfo.vehicles" :key="v.id" :label="v.plate_number + ' (' + v.vehicle_type + ')'" :value="v.id" />
+            <el-option v-for="v in scheduleInfo.vehicles" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '') + (v.vehicle_type ? ' ' + v.vehicle_type : '')" :value="v.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="选择司机">
@@ -466,7 +480,7 @@
                   <el-descriptions-item label="用车联系人">{{ log.snapshot.client_name }}</el-descriptions-item>
                   <el-descriptions-item label="出发 → 目的地">{{ log.snapshot.departure }} → {{ log.snapshot.destination }}</el-descriptions-item>
                   <el-descriptions-item label="出车时间">{{ log.snapshot.departure_time }}</el-descriptions-item>
-                  <el-descriptions-item label="车辆类型">{{ log.snapshot.vehicle_type }}</el-descriptions-item>
+                  <el-descriptions-item label="核定载人数">{{ log.snapshot.vehicle_type }}</el-descriptions-item>
                 </el-descriptions>
               </template>
             </template>
@@ -493,7 +507,7 @@
                 <el-descriptions-item label="租用天数">
                   <span :style="isChanged(log, 'rental_days') ? 'color:#f56c6c;font-weight:bold' : ''">{{ log.snapshot.rental_days }}</span>
                 </el-descriptions-item>
-                <el-descriptions-item label="车辆类型">
+                <el-descriptions-item label="核定载人数">
                   <span :style="isChanged(log, 'vehicle_type') ? 'color:#f56c6c;font-weight:bold' : ''">{{ log.snapshot.vehicle_type }}</span>
                 </el-descriptions-item>
                 <el-descriptions-item label="里程(km)">
@@ -666,6 +680,19 @@
         <el-button @click="confirmDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 设置弹窗 -->
+    <el-dialog v-model="settingsVisible" title="个人设置" width="420px">
+      <el-form label-width="80px">
+        <el-form-item label="OpenID">
+          <el-input v-model="settingsForm.yunzhijia_openid" placeholder="云之家 OpenID" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="settingsVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveSettings">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -680,10 +707,36 @@ onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile) 
 onUnmounted(() => window.removeEventListener('resize', checkMobile))
 
 const tasks = ref([])
+const statusFilter = ref('')
+const settingsVisible = ref(false)
+const settingsForm = ref({ yunzhijia_openid: '' })
+
+const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
+
+const showSettings = () => {
+  settingsForm.value.yunzhijia_openid = user.value.yunzhijia_openid || ''
+  settingsVisible.value = true
+}
+
+const saveSettings = async () => {
+  try {
+    const res = await api.put('/user/openid', { yunzhijia_openid: settingsForm.value.yunzhijia_openid })
+    user.value = res.data
+    localStorage.setItem('user', JSON.stringify(res.data))
+    ElMessage.success('保存成功')
+    settingsVisible.value = false
+  } catch (e) {}
+}
+
+const filteredTasks = computed(() => {
+  if (statusFilter.value === 'all') return tasks.value
+  if (statusFilter.value) return tasks.value.filter(t => t.status === statusFilter.value)
+  return tasks.value.filter(t => t.status !== 'cancelled')
+})
 const laborRates = ref([])
 const clients = ref([])
 const vehicles = ref([])
-const vehicleTypes = computed(() => [...new Set(vehicles.value.map(v => v.vehicle_type).filter(Boolean))])
+const vehicleTypes = computed(() => [...new Set(vehicles.value.map(v => v.capacity).filter(Boolean))])
 const taskDialogVisible = ref(false)
 const scheduleDialogVisible = ref(false)
 const completeDialogVisible = ref(false)
@@ -764,7 +817,7 @@ const finalProfitDisplay = computed(() => {
   return (rental - completeForm.value.actual_fuel_fee - completeForm.value.actual_bridge_fee - completeForm.value.actual_labor_fee - completeForm.value.other_fee).toFixed(2)
 })
 
-const fieldMap = { client_name: '用车联系人', client_phone: '联系电话', departure: '出发地点', destination: '目的地', departure_time: '出车时间', return_time: '回程时间', vehicle_type: '车辆类型', mileage: '任务里程', rental_fee: '租车费', fuel_fee: '油电费', bridge_fee: '桥路费', labor_fee: '司机人工费' }
+const fieldMap = { client_name: '用车联系人', client_phone: '联系电话', departure: '出发地点', destination: '目的地', departure_time: '出车时间', return_time: '回程时间', vehicle_type: '核定载人数', mileage: '任务里程', rental_fee: '租车费', fuel_fee: '油电费', bridge_fee: '桥路费', labor_fee: '司机人工费' }
 const isChanged = (log, key) => (log.changes || []).some(c => c.field === fieldMap[key])
 
 const loadTasks = async () => {
@@ -877,6 +930,17 @@ const deleteTask = async (id) => {
   } catch (e) {}
 }
 
+const confirmDelete = async (id) => {
+  try {
+    await ElMessageBox.confirm('确认删除该任务？', '删除确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await deleteTask(id)
+  } catch (e) {}
+}
+
 const showChangeLog = (row) => {
   currentChangeLog.value = row.change_log || []
   changeLogVisible.value = true
@@ -965,6 +1029,54 @@ const recalcLaborFee = () => {
   if (taskForm.value.labor_rate_id) {
     const rate = laborRates.value.find(r => r.id === taskForm.value.labor_rate_id)
     if (rate) taskForm.value.labor_fee = rate.labor_rate * Math.ceil(getRentalDays() / rate.days)
+  }
+}
+
+const getFuelRate = (capacity) => {
+  const c = parseInt(capacity)
+  if (!c || isNaN(c)) return null
+  if (c >= 31 && c <= 51) return 2.5
+  if (c >= 15 && c <= 17) return 1.5
+  if (c === 7) return 1
+  if (c === 5) return 0.7
+  return null
+}
+
+const recalcFuelFee = () => {
+  const rate = getFuelRate(taskForm.value.vehicle_type)
+  const mileage = taskForm.value.mileage
+  if (rate && mileage > 0) {
+    taskForm.value.fuel_fee = Math.round(rate * mileage * 100) / 100
+  }
+}
+
+const onCapacityChange = () => {
+  recalcFuelFee()
+}
+
+const onMileageChange = () => {
+  recalcFuelFee()
+}
+
+const tollLoading = ref(false)
+
+const onLocationChange = async () => {
+  const dep = taskForm.value.departure?.trim()
+  const dest = taskForm.value.destination?.trim()
+  if (!dep || !dest) return
+  try {
+    tollLoading.value = true
+    const res = await api.get('/estimate-toll', { params: { departure: dep, destination: dest } })
+    if (res.code === 200 && res.data) {
+      taskForm.value.bridge_fee = res.data.tolls
+      taskForm.value.mileage = Math.round(res.data.distance * 1.1 * 10) / 10
+      recalcFuelFee()
+      ElMessage.success(`过路费预估：${res.data.tolls}元（${res.data.distance}km，约${res.data.duration}分钟）`)
+    }
+  } catch (e) {
+    // 静默失败，不打扰用户
+  } finally {
+    tollLoading.value = false
   }
 }
 

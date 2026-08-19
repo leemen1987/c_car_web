@@ -109,6 +109,17 @@ def user_info():
     return jsonify({'code': 200, 'data': user.to_dict()})
 
 
+@app.route('/api/user/openid', methods=['PUT'])
+@login_required
+def update_user_openid():
+    """更新当前用户的云之家 OpenID"""
+    user = User.query.get(session['user_id'])
+    data = request.get_json()
+    user.yunzhijia_openid = data.get('yunzhijia_openid', '').strip()
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '更新成功', 'data': user.to_dict()})
+
+
 # ==================== User Management (Admin) ====================
 
 @app.route('/api/users', methods=['GET'])
@@ -233,15 +244,85 @@ def list_vehicles():
     return jsonify({'code': 200, 'data': [v.to_dict() for v in vehicles]})
 
 
+def _parse_date(val):
+    """Convert empty/falsy string to None, pass through valid date strings."""
+    if not val or not str(val).strip():
+        return None
+    return val
+
+def _amap_geocode(address):
+    """调用高德地理编码API，返回经纬度字符串 'lng,lat' 或 None"""
+    try:
+        params = urllib.parse.urlencode({
+            'address': address,
+            'key': app.config['AMAP_KEY'],
+            'output': 'json'
+        })
+        url = f'https://restapi.amap.com/v3/geocode/geo?{params}'
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            if data.get('status') == '1' and data.get('geocodes'):
+                return data['geocodes'][0]['location']
+    except Exception:
+        pass
+    return None
+
+@app.route('/api/estimate-toll')
+@login_required
+def estimate_toll():
+    """根据出发地和目的地，调用高德驾车路线规划获取过路费预估"""
+    departure = request.args.get('departure', '').strip()
+    destination = request.args.get('destination', '').strip()
+    if not departure or not destination:
+        return jsonify({'code': 400, 'msg': '出发地和目的地不能为空'})
+
+    origin_loc = _amap_geocode(departure)
+    dest_loc = _amap_geocode(destination)
+    if not origin_loc or not dest_loc:
+        return jsonify({'code': 400, 'msg': '地址解析失败，请检查输入'})
+
+    try:
+        params = urllib.parse.urlencode({
+            'origin': origin_loc,
+            'destination': dest_loc,
+            'extensions': 'all',
+            'strategy': 0,
+            'key': app.config['AMAP_KEY']
+        })
+        url = f'https://restapi.amap.com/v3/direction/driving?{params}'
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            if data.get('status') == '1' and data.get('route', {}).get('paths'):
+                path = data['route']['paths'][0]
+                tolls = float(path.get('tolls', 0))
+                distance = round(float(path.get('distance', 0)) / 1000, 1)
+                duration = round(float(path.get('duration', 0)) / 60)
+                return jsonify({'code': 200, 'data': {
+                    'tolls': tolls,
+                    'distance': distance,
+                    'duration': duration
+                }})
+    except Exception:
+        pass
+    return jsonify({'code': 500, 'msg': '路线查询失败'})
+
 @app.route('/api/vehicles', methods=['POST'])
 @login_required
 def create_vehicle():
     data = request.get_json()
     vehicle = Vehicle(
         plate_number=data.get('plate_number', ''),
+        capacity=data.get('capacity', ''),
         vehicle_type=data.get('vehicle_type', ''),
         company=data.get('company', ''),
-        status=data.get('status', 'available')
+        status=data.get('status', 'available'),
+        registration_date=_parse_date(data.get('registration_date', '')),
+        issue_date=_parse_date(data.get('issue_date', '')),
+        usage_type=data.get('usage_type', ''),
+        brand_model=data.get('brand_model', ''),
+        inspection_expiry=_parse_date(data.get('inspection_expiry', '')),
+        scrap_date=data.get('scrap_date', ''),
+        insurance_expiry=_parse_date(data.get('insurance_expiry', ''))
     )
     db.session.add(vehicle)
     db.session.commit()
@@ -257,12 +338,20 @@ def update_vehicle(vehicle_id):
     data = request.get_json()
     if 'plate_number' in data:
         vehicle.plate_number = data['plate_number']
+    if 'capacity' in data:
+        vehicle.capacity = data['capacity']
     if 'vehicle_type' in data:
         vehicle.vehicle_type = data['vehicle_type']
     if 'company' in data:
         vehicle.company = data['company']
     if 'status' in data:
         vehicle.status = data['status']
+    for field in ['registration_date', 'issue_date', 'usage_type', 'brand_model', 'inspection_expiry', 'scrap_date', 'insurance_expiry']:
+        if field in data:
+            if field in ('registration_date', 'issue_date', 'inspection_expiry', 'insurance_expiry'):
+                setattr(vehicle, field, _parse_date(data[field]))
+            else:
+                setattr(vehicle, field, data[field])
     db.session.commit()
     return jsonify({'code': 200, 'msg': '更新成功', 'data': vehicle.to_dict()})
 
@@ -1203,9 +1292,13 @@ def submit_approval():
         except Exception as e:
             return jsonify({'code': 500, 'msg': f'获取云之家token失败: {str(e)}'})
 
+        # 使用当前登录用户的 OpenID，未配置则使用默认值
+        current_user = User.query.get(session['user_id'])
+        creator_openid = (current_user.yunzhijia_openid or '').strip() or app.config['YUNZHIJIA_CREATOR_OPENID']
+
         payload = {
             'formCodeId': template_id,
-            'creator': app.config['YUNZHIJIA_CREATOR_OPENID'],
+            'creator': creator_openid,
             'skipWidgetAuthorityCheck': True,
             'useAlias': False,
             'requestId': str(uuid.uuid4()),
@@ -2172,6 +2265,46 @@ def init_db():
         except Exception:
             app.logger.debug(f"ALTER TABLE tasks.{col} skipped (already exists)")
             db.session.rollback()
+
+    # 给 users 表增加 yunzhijia_openid 字段（兼容旧库）
+    try:
+        db.session.execute(db.text("ALTER TABLE users ADD COLUMN yunzhijia_openid VARCHAR(64) DEFAULT ''"))
+        db.session.commit()
+    except Exception:
+        app.logger.debug("ALTER TABLE users.yunzhijia_openid skipped (already exists)")
+        db.session.rollback()
+
+    # 给 vehicles 表增加新字段（兼容旧库）
+    vehicle_cols = [
+        ("registration_date", "VARCHAR(20) DEFAULT ''"),
+        ("issue_date", "VARCHAR(20) DEFAULT ''"),
+        ("usage_type", "VARCHAR(50) DEFAULT ''"),
+        ("brand_model", "VARCHAR(100) DEFAULT ''"),
+        ("inspection_expiry", "VARCHAR(20) DEFAULT ''"),
+        ("scrap_date", "VARCHAR(20) DEFAULT ''"),
+        ("insurance_expiry", "VARCHAR(20) DEFAULT ''"),
+    ]
+    for col_name, col_type in vehicle_cols:
+        try:
+            db.session.execute(db.text(f"ALTER TABLE vehicles ADD COLUMN {col_name} {col_type}"))
+            db.session.commit()
+        except Exception:
+            app.logger.debug(f"ALTER TABLE vehicles.{col_name} skipped (already exists)")
+            db.session.rollback()
+
+    # 增加 capacity（核定在人数）列，并将旧 vehicle_type 数据迁移过去
+    try:
+        db.session.execute(db.text("ALTER TABLE vehicles ADD COLUMN capacity VARCHAR(20) DEFAULT ''"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # 将旧 vehicle_type 中的在人数数据（如"7座"）迁移到 capacity
+    try:
+        db.session.execute(db.text("UPDATE vehicles SET capacity = vehicle_type WHERE capacity = '' AND vehicle_type != ''"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
     # Create admin if not exists
     if not User.query.filter_by(username='admin').first():

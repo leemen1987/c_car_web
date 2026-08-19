@@ -12,6 +12,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), default='user')  # admin, user
     permissions = db.Column(db.Text, default='[]')  # JSON array of page permissions
+    yunzhijia_openid = db.Column(db.String(64), default='')  # 云之家 OpenID
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     def get_permissions(self):
@@ -29,6 +30,7 @@ class User(db.Model):
             'username': self.username,
             'role': self.role,
             'permissions': self.get_permissions(),
+            'yunzhijia_openid': self.yunzhijia_openid or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
         }
 
@@ -76,18 +78,34 @@ class Vehicle(db.Model):
     __tablename__ = 'vehicles'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     plate_number = db.Column(db.String(20), unique=True, nullable=False)
-    vehicle_type = db.Column(db.String(50), nullable=False)
+    capacity = db.Column(db.String(20), default='')  # 核定载人数
+    vehicle_type = db.Column(db.String(50), default='')  # 车辆类型
     company = db.Column(db.String(50), default='')  # 所属公司：国顺司、国开司、外单位
     status = db.Column(db.String(20), default='available')  # available, busy, maintenance
+    registration_date = db.Column(db.Date, nullable=True)  # 注册日期
+    issue_date = db.Column(db.Date, nullable=True)  # 发证日期
+    usage_type = db.Column(db.String(50), default='')  # 使用性质
+    brand_model = db.Column(db.String(100), default='')  # 品牌型号
+    inspection_expiry = db.Column(db.Date, nullable=True)  # 检验有效期
+    scrap_date = db.Column(db.String(20), default='')  # 强制报废期
+    insurance_expiry = db.Column(db.Date, nullable=True)  # 保险到期日期
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     def to_dict(self):
         return {
             'id': self.id,
             'plate_number': self.plate_number,
-            'vehicle_type': self.vehicle_type,
+            'capacity': self.capacity or '',
+            'vehicle_type': self.vehicle_type or '',
             'company': getattr(self, 'company', '') or '',
             'status': self.status,
+            'registration_date': self.registration_date.strftime('%Y-%m-%d') if self.registration_date else '',
+            'issue_date': self.issue_date.strftime('%Y-%m-%d') if self.issue_date else '',
+            'usage_type': self.usage_type or '',
+            'brand_model': self.brand_model or '',
+            'inspection_expiry': self.inspection_expiry.strftime('%Y-%m-%d') if self.inspection_expiry else '',
+            'scrap_date': self.scrap_date or '',
+            'insurance_expiry': self.insurance_expiry.strftime('%Y-%m-%d') if self.insurance_expiry else '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
         }
 

@@ -102,6 +102,10 @@
               {{ user?.role === 'admin' ? '管理员' : '用户' }}
             </el-tag>
           </div>
+          <el-button text class="settings-btn" @click="showSettings">
+            <el-icon><Setting /></el-icon>
+            <span style="margin-left:4px">设置</span>
+          </el-button>
           <el-button text class="logout-btn" @click="logout">
             <el-icon><SwitchButton /></el-icon>
             <span style="margin-left:4px">退出</span>
@@ -112,12 +116,26 @@
         <router-view />
       </el-main>
     </el-container>
+
+    <!-- 设置弹窗 -->
+    <el-dialog v-model="settingsVisible" title="个人设置" width="420px">
+      <el-form label-width="80px">
+        <el-form-item label="OpenID">
+          <el-input v-model="settingsForm.yunzhijia_openid" placeholder="云之家 OpenID" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="settingsVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveSettings">保存</el-button>
+      </template>
+    </el-dialog>
   </el-container>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import api from '../utils/api'
 
 const route = useRoute()
@@ -125,6 +143,8 @@ const router = useRouter()
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
 const drawerVisible = ref(false)
 const isMobile = ref(false)
+const settingsVisible = ref(false)
+const settingsForm = ref({ yunzhijia_openid: '' })
 
 const checkMobile = () => { isMobile.value = window.innerWidth <= 768 }
 onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile) })
@@ -135,6 +155,21 @@ const activeMenu = computed(() => route.path)
 const hasPermission = (perm) => {
   if (user.value.role === 'admin') return true
   return (user.value.permissions || []).includes(perm)
+}
+
+const showSettings = () => {
+  settingsForm.value.yunzhijia_openid = user.value.yunzhijia_openid || ''
+  settingsVisible.value = true
+}
+
+const saveSettings = async () => {
+  try {
+    const res = await api.put('/user/openid', { yunzhijia_openid: settingsForm.value.yunzhijia_openid })
+    user.value = res.data
+    localStorage.setItem('user', JSON.stringify(res.data))
+    ElMessage.success('保存成功')
+    settingsVisible.value = false
+  } catch (e) {}
 }
 
 const logout = async () => {
@@ -267,6 +302,16 @@ const logout = async () => {
 }
 .logout-btn:hover {
   color: #ef4444 !important;
+}
+.settings-btn {
+  color: var(--text-muted) !important;
+  font-size: 14px;
+  margin-left: 2px;
+  padding: 4px 6px;
+  transition: color 0.2s;
+}
+.settings-btn:hover {
+  color: var(--primary) !important;
 }
 
 /* ========== 主内容区 ========== */
