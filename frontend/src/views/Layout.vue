@@ -123,8 +123,8 @@
         <el-form-item label="OpenID">
           <el-input v-model="settingsForm.yunzhijia_openid" placeholder="云之家 OpenID" />
         </el-form-item>
-        <el-form-item label="发送人账号">
-          <el-input v-model="settingsForm.wx_sender" placeholder="企业微信 UserID（内部员工）" />
+        <el-form-item label="UserID">
+          <el-input v-model="settingsForm.wx_sender" placeholder="企业微信 UserID" />
         </el-form-item>
       </el-form>
       <template #footer>

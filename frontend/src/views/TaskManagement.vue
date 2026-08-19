@@ -18,7 +18,7 @@
           <div style="display:flex;gap:8px;align-items:center">
             <el-button type="success" @click="showApprovalDialog">发起审批</el-button>
             <el-button type="primary" @click="showAddDialog">录入任务</el-button>
-            <el-button @click="showSettings">设置</el-button>
+            <el-button v-if="user.role === 'admin'" @click="showSettings"><el-icon><Setting /></el-icon><span style="margin-left:4px">费率</span></el-button>
           </div>
         </div>
       </template>
@@ -681,47 +681,35 @@
       </template>
     </el-dialog>
 
-    <!-- 设置弹窗 -->
-    <el-dialog v-model="settingsVisible" title="设置" width="520px">
-      <el-divider content-position="left">个人设置</el-divider>
-      <el-form label-width="100px">
-        <el-form-item label="OpenID">
-          <el-input v-model="settingsForm.yunzhijia_openid" placeholder="云之家 OpenID" />
-        </el-form-item>
-        <el-form-item label="发送人账号">
-          <el-input v-model="settingsForm.wx_sender" placeholder="企业微信 UserID（内部员工）" />
-        </el-form-item>
-      </el-form>
-      <template v-if="user.role === 'admin'">
-        <el-divider content-position="left">油电费单价（元/km）</el-divider>
-        <div style="margin-bottom:12px">
-          <el-button type="primary" size="small" @click="addFuelRate">新增规则</el-button>
-        </div>
-        <el-table :data="fuelRates" border size="small">
-          <el-table-column label="核定载人数" min-width="140">
-            <template #default="{ row, $index }">
-              <div style="display:flex;gap:4px;align-items:center">
-                <el-input-number v-model="row.min" :min="1" :max="200" size="small" style="width:70px" controls-position="right" />
-                <span>~</span>
-                <el-input-number v-model="row.max" :min="1" :max="200" size="small" style="width:70px" controls-position="right" />
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="单价" width="120">
-            <template #default="{ row }">
-              <el-input-number v-model="row.rate" :min="0" :max="100" :precision="1" size="small" style="width:90px" controls-position="right" />
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="70" align="center">
-            <template #default="{ $index }">
-              <el-button type="danger" size="small" link @click="fuelRates.splice($index, 1)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </template>
+    <!-- 费率设置弹窗 -->
+    <el-dialog v-model="settingsVisible" title="油电费费率配置" width="520px">
+      <div style="margin-bottom:12px">
+        <el-button type="primary" size="small" @click="addFuelRate">新增规则</el-button>
+      </div>
+      <el-table :data="fuelRates" border size="small">
+        <el-table-column label="核定载人数" min-width="140">
+          <template #default="{ row, $index }">
+            <div style="display:flex;gap:4px;align-items:center">
+              <el-input-number v-model="row.min" :min="1" :max="200" size="small" style="width:70px" controls-position="right" />
+              <span>~</span>
+              <el-input-number v-model="row.max" :min="1" :max="200" size="small" style="width:70px" controls-position="right" />
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="单价(元/km)" width="130">
+          <template #default="{ row }">
+            <el-input-number v-model="row.rate" :min="0" :max="100" :precision="1" size="small" style="width:90px" controls-position="right" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="70" align="center">
+          <template #default="{ $index }">
+            <el-button type="danger" size="small" link @click="fuelRates.splice($index, 1)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
       <template #footer>
         <el-button @click="settingsVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveSettings">保存</el-button>
+        <el-button type="primary" @click="saveFuelRates">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -740,7 +728,6 @@ onUnmounted(() => window.removeEventListener('resize', checkMobile))
 const tasks = ref([])
 const statusFilter = ref('')
 const settingsVisible = ref(false)
-const settingsForm = ref({ yunzhijia_openid: '', wx_sender: '' })
 const fuelRates = ref([])
 
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
@@ -770,19 +757,12 @@ const addFuelRate = () => {
 }
 
 const showSettings = () => {
-  settingsForm.value.yunzhijia_openid = user.value.yunzhijia_openid || ''
-  settingsForm.value.wx_sender = user.value.wx_sender || ''
   settingsVisible.value = true
 }
 
-const saveSettings = async () => {
+const saveFuelRates = async () => {
   try {
-    const res = await api.put('/user/settings', settingsForm.value)
-    user.value = res.data
-    localStorage.setItem('user', JSON.stringify(res.data))
-    if (user.value.role === 'admin' && fuelRates.value.length > 0) {
-      await api.put('/system-config/fuel_rates', { value: fuelRates.value })
-    }
+    await api.put('/system-config/fuel_rates', { value: fuelRates.value })
     ElMessage.success('保存成功')
     settingsVisible.value = false
   } catch (e) {}
