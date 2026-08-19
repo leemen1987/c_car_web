@@ -683,9 +683,12 @@
 
     <!-- 设置弹窗 -->
     <el-dialog v-model="settingsVisible" title="个人设置" width="420px">
-      <el-form label-width="80px">
+      <el-form label-width="100px">
         <el-form-item label="OpenID">
           <el-input v-model="settingsForm.yunzhijia_openid" placeholder="云之家 OpenID" />
+        </el-form-item>
+        <el-form-item label="发送人账号">
+          <el-input v-model="settingsForm.wx_sender" placeholder="企业微信 UserID（内部员工）" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -709,18 +712,19 @@ onUnmounted(() => window.removeEventListener('resize', checkMobile))
 const tasks = ref([])
 const statusFilter = ref('')
 const settingsVisible = ref(false)
-const settingsForm = ref({ yunzhijia_openid: '' })
+const settingsForm = ref({ yunzhijia_openid: '', wx_sender: '' })
 
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
 
 const showSettings = () => {
   settingsForm.value.yunzhijia_openid = user.value.yunzhijia_openid || ''
+  settingsForm.value.wx_sender = user.value.wx_sender || ''
   settingsVisible.value = true
 }
 
 const saveSettings = async () => {
   try {
-    const res = await api.put('/user/openid', { yunzhijia_openid: settingsForm.value.yunzhijia_openid })
+    const res = await api.put('/user/settings', settingsForm.value)
     user.value = res.data
     localStorage.setItem('user', JSON.stringify(res.data))
     ElMessage.success('保存成功')
@@ -1169,28 +1173,29 @@ const confirmDetail = ref(null)
 
 const pushConfirm = async (row) => {
   try {
-    // 先获取客户的联系人信息（含企业微信UserID和发送人）
+    // 先获取客户的联系人信息（含企业微信UserID）
     let wxUserid = ''
-    let wxSender = ''
     try {
       const clientRes = await api.get(`/clients/${row.client_id}`)
       if (clientRes.code === 200 && clientRes.data?.contacts) {
         const contact = clientRes.data.contacts.find(c => c.wx_userid)
         if (contact) {
           wxUserid = contact.wx_userid
-          wxSender = contact.wx_sender || ''
         }
       }
     } catch (e) {
       // 获取失败不影响推送
     }
 
+    // 发送人使用当前用户在设置中配置的账号
+    let wxSender = user.value.wx_sender || ''
+
     const isExternal = wxUserid.startsWith('wm')
     let confirmMsg = ''
     if (!wxUserid) {
       confirmMsg = `确定要向客户"${row.client_name}"推送任务确认消息吗？\n⚠️ 未配置企业微信用户ID，需手动发送确认链接`
     } else if (isExternal && !wxSender) {
-      confirmMsg = `⚠️ 外部联系人未配置发送人，无法自动推送。\n请先在客户管理→联系人中配置"发送人"字段`
+      confirmMsg = `⚠️ 未配置发送人账号，无法自动推送。\n请先在右上角设置中配置"发送人账号"`
     } else {
       confirmMsg = `确定要向客户"${row.client_name}"推送任务确认消息吗？\n将通过企业微信发送`
     }

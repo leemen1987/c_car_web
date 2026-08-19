@@ -13,6 +13,7 @@ class User(db.Model):
     role = db.Column(db.String(20), default='user')  # admin, user
     permissions = db.Column(db.Text, default='[]')  # JSON array of page permissions
     yunzhijia_openid = db.Column(db.String(64), default='')  # 云之家 OpenID
+    wx_sender = db.Column(db.String(64), default='')  # 企业微信发送人账号（内部员工UserID）
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     def get_permissions(self):
@@ -31,6 +32,7 @@ class User(db.Model):
             'role': self.role,
             'permissions': self.get_permissions(),
             'yunzhijia_openid': self.yunzhijia_openid or '',
+            'wx_sender': self.wx_sender or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
         }
 

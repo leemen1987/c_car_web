@@ -119,9 +119,12 @@
 
     <!-- 设置弹窗 -->
     <el-dialog v-model="settingsVisible" title="个人设置" width="420px">
-      <el-form label-width="80px">
+      <el-form label-width="100px">
         <el-form-item label="OpenID">
           <el-input v-model="settingsForm.yunzhijia_openid" placeholder="云之家 OpenID" />
+        </el-form-item>
+        <el-form-item label="发送人账号">
+          <el-input v-model="settingsForm.wx_sender" placeholder="企业微信 UserID（内部员工）" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -144,7 +147,7 @@ const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
 const drawerVisible = ref(false)
 const isMobile = ref(false)
 const settingsVisible = ref(false)
-const settingsForm = ref({ yunzhijia_openid: '' })
+const settingsForm = ref({ yunzhijia_openid: '', wx_sender: '' })
 
 const checkMobile = () => { isMobile.value = window.innerWidth <= 768 }
 onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile) })
@@ -159,12 +162,13 @@ const hasPermission = (perm) => {
 
 const showSettings = () => {
   settingsForm.value.yunzhijia_openid = user.value.yunzhijia_openid || ''
+  settingsForm.value.wx_sender = user.value.wx_sender || ''
   settingsVisible.value = true
 }
 
 const saveSettings = async () => {
   try {
-    const res = await api.put('/user/openid', { yunzhijia_openid: settingsForm.value.yunzhijia_openid })
+    const res = await api.put('/user/settings', settingsForm.value)
     user.value = res.data
     localStorage.setItem('user', JSON.stringify(res.data))
     ElMessage.success('保存成功')

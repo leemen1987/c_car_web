@@ -76,12 +76,6 @@
             <span v-else style="color:#c0c4cc">-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="wx_sender" label="发送人" min-width="100">
-          <template #default="{ row }">
-            <span v-if="row.wx_sender">{{ row.wx_sender }}</span>
-            <span v-else style="color:#c0c4cc">-</span>
-          </template>
-        </el-table-column>
         <el-table-column prop="external_corp_name" label="企业微信名称" min-width="120">
           <template #default="{ row }">
             <span v-if="row.external_corp_name">{{ row.external_corp_name }}</span>
@@ -109,15 +103,12 @@
           <el-form-item label="手机号码">
             <el-input v-model="contactForm.phone" />
           </el-form-item>
-          <el-form-item label="发送人账号">
-            <el-input v-model="contactForm.wx_sender" placeholder="你的企业微信账号（内部员工）" />
-            <div style="color:#909399;font-size:12px;margin-top:4px">填入后可自动获取你的外部联系人列表</div>
-          </el-form-item>
           <el-form-item label="企业微信ID">
             <div style="display:flex;gap:8px;width:100%">
               <el-input v-model="contactForm.wx_userid" placeholder="外部联系人ID（wm开头）" style="flex:1" />
-              <el-button type="primary" :loading="fetchingContacts" @click="fetchExternalContacts" :disabled="!contactForm.wx_sender">获取</el-button>
+              <el-button type="primary" :loading="fetchingContacts" @click="fetchExternalContacts" :disabled="!userWxSender">获取</el-button>
             </div>
+            <div v-if="!userWxSender" style="color:#e6a23c;font-size:12px;margin-top:4px">请先在右上角设置中配置"发送人账号"</div>
           </el-form-item>
           <!-- 外部联系人选择列表 -->
           <el-form-item v-if="externalContacts.length > 0" label="选择客户">
@@ -143,11 +134,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../utils/api'
 
 const clients = ref([])
+
+const currentUser = computed(() => {
+  try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} }
+})
+const userWxSender = computed(() => currentUser.value.wx_sender || '')
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
@@ -156,7 +152,7 @@ const form = ref({ name: '', address: '' })
 const contactsVisible = ref(false)
 const currentClient = ref({ id: null, name: '', contacts: [] })
 const contactFormVisible = ref(false)
-const contactForm = ref({ name: '', phone: '', wx_userid: '', wx_sender: '', external_corp_name: '' })
+const contactForm = ref({ name: '', phone: '', wx_userid: '', external_corp_name: '' })
 const externalContacts = ref([])
 const fetchingContacts = ref(false)
 
@@ -187,25 +183,25 @@ const showContacts = (row) => {
 }
 
 const showAddContact = () => {
-  contactForm.value = { name: '', phone: '', wx_userid: '', wx_sender: '', external_corp_name: '' }
+  contactForm.value = { name: '', phone: '', wx_userid: '', external_corp_name: '' }
   externalContacts.value = []
   contactFormVisible.value = true
 }
 
 const editContact = (row) => {
-  contactForm.value = { id: row.id, name: row.name, phone: row.phone, wx_userid: row.wx_userid || '', wx_sender: row.wx_sender || '', external_corp_name: row.external_corp_name || '' }
+  contactForm.value = { id: row.id, name: row.name, phone: row.phone, wx_userid: row.wx_userid || '', external_corp_name: row.external_corp_name || '' }
   externalContacts.value = []
   contactFormVisible.value = true
 }
 
 const fetchExternalContacts = async () => {
-  if (!contactForm.value.wx_sender) {
-    ElMessage.warning('请先填写发送人账号')
+  if (!userWxSender.value) {
+    ElMessage.warning('请先在设置中配置发送人账号')
     return
   }
   fetchingContacts.value = true
   try {
-    const res = await api.get(`/wx-external-contacts?sender=${contactForm.value.wx_sender}`)
+    const res = await api.get(`/wx-external-contacts?sender=${userWxSender.value}`)
     if (res.code === 200) {
       externalContacts.value = res.data || []
       if (externalContacts.value.length === 0) {

@@ -109,13 +109,16 @@ def user_info():
     return jsonify({'code': 200, 'data': user.to_dict()})
 
 
-@app.route('/api/user/openid', methods=['PUT'])
+@app.route('/api/user/settings', methods=['PUT'])
 @login_required
-def update_user_openid():
-    """更新当前用户的云之家 OpenID"""
+def update_user_settings():
+    """更新当前用户的个人设置（OpenID、发送人账号）"""
     user = User.query.get(session['user_id'])
     data = request.get_json()
-    user.yunzhijia_openid = data.get('yunzhijia_openid', '').strip()
+    if 'yunzhijia_openid' in data:
+        user.yunzhijia_openid = data.get('yunzhijia_openid', '').strip()
+    if 'wx_sender' in data:
+        user.wx_sender = data.get('wx_sender', '').strip()
     db.session.commit()
     return jsonify({'code': 200, 'msg': '更新成功', 'data': user.to_dict()})
 
@@ -2272,6 +2275,14 @@ def init_db():
         db.session.commit()
     except Exception:
         app.logger.debug("ALTER TABLE users.yunzhijia_openid skipped (already exists)")
+        db.session.rollback()
+
+    # 给 users 表增加 wx_sender 字段（兼容旧库）
+    try:
+        db.session.execute(db.text("ALTER TABLE users ADD COLUMN wx_sender VARCHAR(64) DEFAULT ''"))
+        db.session.commit()
+    except Exception:
+        app.logger.debug("ALTER TABLE users.wx_sender skipped (already exists)")
         db.session.rollback()
 
     # 给 vehicles 表增加新字段（兼容旧库）
