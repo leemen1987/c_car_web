@@ -479,3 +479,24 @@ class LongRentalBill(db.Model):
             'remark': self.remark or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
         }
+
+
+class SystemConfig(db.Model):
+    __tablename__ = 'system_config'
+    key = db.Column(db.String(50), primary_key=True)
+    value = db.Column(db.Text, default='')
+
+    @staticmethod
+    def get(key, default=None):
+        cfg = SystemConfig.query.get(key)
+        return cfg.value if cfg else default
+
+    @staticmethod
+    def set(key, value):
+        cfg = SystemConfig.query.get(key)
+        if cfg:
+            cfg.value = value
+        else:
+            cfg = SystemConfig(key=key, value=value)
+            db.session.add(cfg)
+        db.session.commit()

@@ -682,7 +682,8 @@
     </el-dialog>
 
     <!-- 设置弹窗 -->
-    <el-dialog v-model="settingsVisible" title="个人设置" width="420px">
+    <el-dialog v-model="settingsVisible" title="设置" width="520px">
+      <el-divider content-position="left">个人设置</el-divider>
       <el-form label-width="100px">
         <el-form-item label="OpenID">
           <el-input v-model="settingsForm.yunzhijia_openid" placeholder="云之家 OpenID" />
@@ -691,6 +692,33 @@
           <el-input v-model="settingsForm.wx_sender" placeholder="企业微信 UserID（内部员工）" />
         </el-form-item>
       </el-form>
+      <template v-if="user.role === 'admin'">
+        <el-divider content-position="left">油电费单价（元/km）</el-divider>
+        <div style="margin-bottom:12px">
+          <el-button type="primary" size="small" @click="addFuelRate">新增规则</el-button>
+        </div>
+        <el-table :data="fuelRates" border size="small">
+          <el-table-column label="核定载人数" min-width="140">
+            <template #default="{ row, $index }">
+              <div style="display:flex;gap:4px;align-items:center">
+                <el-input-number v-model="row.min" :min="1" :max="200" size="small" style="width:70px" controls-position="right" />
+                <span>~</span>
+                <el-input-number v-model="row.max" :min="1" :max="200" size="small" style="width:70px" controls-position="right" />
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="单价" width="120">
+            <template #default="{ row }">
+              <el-input-number v-model="row.rate" :min="0" :max="100" :precision="1" size="small" style="width:90px" controls-position="right" />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="70" align="center">
+            <template #default="{ $index }">
+              <el-button type="danger" size="small" link @click="fuelRates.splice($index, 1)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
       <template #footer>
         <el-button @click="settingsVisible = false">取消</el-button>
         <el-button type="primary" @click="saveSettings">保存</el-button>
@@ -713,8 +741,33 @@ const tasks = ref([])
 const statusFilter = ref('')
 const settingsVisible = ref(false)
 const settingsForm = ref({ yunzhijia_openid: '', wx_sender: '' })
+const fuelRates = ref([])
 
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
+
+const defaultFuelRates = [
+  { min: 31, max: 51, rate: 2.5 },
+  { min: 15, max: 17, rate: 1.5 },
+  { min: 7, max: 7, rate: 1 },
+  { min: 5, max: 5, rate: 0.7 }
+]
+
+const loadFuelRates = async () => {
+  try {
+    const res = await api.get('/system-config/fuel_rates')
+    if (res.code === 200 && res.data) {
+      fuelRates.value = JSON.parse(res.data)
+    } else {
+      fuelRates.value = [...defaultFuelRates]
+    }
+  } catch (e) {
+    fuelRates.value = [...defaultFuelRates]
+  }
+}
+
+const addFuelRate = () => {
+  fuelRates.value.push({ min: 1, max: 1, rate: 1 })
+}
 
 const showSettings = () => {
   settingsForm.value.yunzhijia_openid = user.value.yunzhijia_openid || ''
@@ -727,6 +780,9 @@ const saveSettings = async () => {
     const res = await api.put('/user/settings', settingsForm.value)
     user.value = res.data
     localStorage.setItem('user', JSON.stringify(res.data))
+    if (user.value.role === 'admin' && fuelRates.value.length > 0) {
+      await api.put('/system-config/fuel_rates', { value: fuelRates.value })
+    }
     ElMessage.success('保存成功')
     settingsVisible.value = false
   } catch (e) {}
@@ -1053,10 +1109,10 @@ const recalcLaborFee = () => {
 const getFuelRate = (capacity) => {
   const c = parseInt(capacity)
   if (!c || isNaN(c)) return null
-  if (c >= 31 && c <= 51) return 2.5
-  if (c >= 15 && c <= 17) return 1.5
-  if (c === 7) return 1
-  if (c === 5) return 0.7
+  const rates = fuelRates.value.length > 0 ? fuelRates.value : defaultFuelRates
+  for (const r of rates) {
+    if (c >= r.min && c <= r.max) return r.rate
+  }
   return null
 }
 
@@ -1262,7 +1318,7 @@ const showConfirmDetail = async (row) => {
   }
 }
 
-onMounted(() => { loadTasks(); loadLaborRates(); loadClients(); loadVehicles() })
+onMounted(() => { loadTasks(); loadLaborRates(); loadClients(); loadVehicles(); loadFuelRates() })
 </script>
 
 <style scoped>

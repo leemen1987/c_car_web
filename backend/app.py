@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, session, redirect
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
-from models import db, User, Driver, Vehicle, VehicleCompany, Task, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot, LongRentalContract, LongRentalBill
+from models import db, User, Driver, Vehicle, VehicleCompany, Task, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot, LongRentalContract, LongRentalBill, SystemConfig
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 from functools import wraps
@@ -308,6 +308,22 @@ def estimate_toll():
     except Exception:
         pass
     return jsonify({'code': 500, 'msg': '路线查询失败'})
+
+@app.route('/api/system-config/<key>')
+@login_required
+def get_system_config(key):
+    value = SystemConfig.get(key)
+    return jsonify({'code': 200, 'data': value})
+
+@app.route('/api/system-config/<key>', methods=['PUT'])
+@admin_required
+def update_system_config(key):
+    data = request.get_json()
+    value = data.get('value', '')
+    if isinstance(value, (dict, list)):
+        value = json.dumps(value, ensure_ascii=False)
+    SystemConfig.set(key, value)
+    return jsonify({'code': 200, 'msg': '保存成功'})
 
 @app.route('/api/vehicles', methods=['POST'])
 @login_required
@@ -2316,6 +2332,16 @@ def init_db():
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+    # 初始化油电费费率默认配置
+    default_fuel_rates = json.dumps([
+        {"min": 31, "max": 51, "rate": 2.5},
+        {"min": 15, "max": 17, "rate": 1.5},
+        {"min": 7, "max": 7, "rate": 1},
+        {"min": 5, "max": 5, "rate": 0.7}
+    ], ensure_ascii=False)
+    if not SystemConfig.query.get('fuel_rates'):
+        db.session.add(SystemConfig(key='fuel_rates', value=default_fuel_rates))
 
     # Create admin if not exists
     if not User.query.filter_by(username='admin').first():
