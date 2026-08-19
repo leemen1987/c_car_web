@@ -132,7 +132,7 @@
             <div style="display:flex;flex-wrap:nowrap;gap:4px;justify-content:center;align-items:center">
               <el-button v-if="row.status === 'pending'" type="primary" size="small" @click="showScheduleDialog(row)">排班</el-button>
               <el-button v-if="row.status === 'scheduled'" type="warning" size="small" @click="showScheduleDialog(row)">重新排班</el-button>
-              <el-button v-if="row.status === 'scheduled'" type="success" size="small" @click="showCompleteDialog(row)">完成</el-button>
+              <el-button v-if="row.status === 'scheduled'" type="success" size="small" :disabled="!isPastReturn(row)" @click="showCompleteDialog(row)">完成</el-button>
               <el-button v-if="row.status === 'pending' || row.status === 'scheduled'" type="danger" size="small" plain @click="showCancelDialog(row)">取消</el-button>
               <el-button v-if="(row.status === 'completed' || row.status === 'cancelled') && row.change_log && row.change_log.length" type="info" size="small" @click="showChangeLog(row)">变更记录</el-button>
               <el-dropdown trigger="click">
@@ -216,7 +216,7 @@
           <div class="card-actions">
             <el-button v-if="row.status === 'pending'" type="primary" size="small" @click="showScheduleDialog(row)">排班</el-button>
             <el-button v-if="row.status === 'scheduled'" type="warning" size="small" @click="showScheduleDialog(row)">重新排班</el-button>
-            <el-button v-if="row.status === 'scheduled'" type="success" size="small" @click="showCompleteDialog(row)">完成</el-button>
+            <el-button v-if="row.status === 'scheduled'" type="success" size="small" :disabled="!isPastReturn(row)" @click="showCompleteDialog(row)">完成</el-button>
             <el-button v-if="row.status === 'pending' || row.status === 'scheduled'" type="danger" size="small" @click="showCancelDialog(row)">取消</el-button>
             <el-button v-if="row.status === 'scheduled' && !row.schedule_confirm_status" type="primary" size="small" @click="pushConfirm(row)">推送确认</el-button>
             <el-dropdown trigger="click">
@@ -416,11 +416,11 @@
     <!-- Complete Task Dialog -->
     <el-dialog v-model="completeDialogVisible" title="完成任务 - 录入实际费用" :width="isMobile ? '100%' : '500px'" :fullscreen="isMobile">
       <el-form :model="completeForm" :label-width="isMobile ? '100px' : '110px'">
-        <el-form-item label="实际油电费">
-          <el-input-number v-model="completeForm.actual_fuel_fee" :min="0" :precision="2" style="width:100%" />
+        <el-form-item label="油电费(预估)">
+          <el-input :model-value="completeForm.actual_fuel_fee" disabled />
         </el-form-item>
-        <el-form-item label="实际桥路费">
-          <el-input-number v-model="completeForm.actual_bridge_fee" :min="0" :precision="2" style="width:100%" />
+        <el-form-item label="桥路费(预估)">
+          <el-input :model-value="completeForm.actual_bridge_fee" disabled />
         </el-form-item>
         <el-form-item label="实际司机人工费">
           <el-input-number v-model="completeForm.actual_labor_fee" :min="0" :precision="2" style="width:100%" />
@@ -771,6 +771,11 @@ const isPastDeparture = (row) => {
   return new Date(row.departure_time) <= new Date()
 }
 
+const isPastReturn = (row) => {
+  if (!row.return_time) return true
+  return new Date(row.return_time) <= new Date()
+}
+
 const canSubmitApproval = (row) => {
   if (row.status !== 'scheduled' || isPastDeparture(row)) return false
   const status = row.yzj_approval_status
@@ -909,7 +914,16 @@ const submitSchedule = async () => {
 
 const showCompleteDialog = (row) => {
   completeTaskId.value = row.id
-  completeForm.value = { actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '' }
+  completeForm.value = {
+    actual_fuel_fee: row.fuel_fee || 0,
+    actual_bridge_fee: row.bridge_fee || 0,
+    actual_labor_fee: 0,
+    other_fee: 0,
+    remark: '',
+    is_paid: false,
+    paid_date: '',
+    paid_method: ''
+  }
   completeDialogVisible.value = true
 }
 
