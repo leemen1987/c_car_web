@@ -20,6 +20,12 @@
                 <el-option label="单位包车" value="company" />
               </el-select>
             </el-form-item>
+            <el-form-item label="收款状态">
+              <el-select v-model="clientQuery.is_paid" placeholder="全部" clearable style="width:100px">
+                <el-option label="已收款" value="1" />
+                <el-option label="未收款" value="0" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="收款方式">
               <el-select v-model="clientQuery.paid_method" placeholder="全部" clearable style="width:120px">
                 <el-option label="转账" value="转账" />
@@ -108,6 +114,12 @@
                 <el-option label="单位包车" value="company" />
               </el-select>
             </el-form-item>
+            <el-form-item label="收款状态">
+              <el-select v-model="driverQuery.is_paid" placeholder="全部" clearable style="width:100px">
+                <el-option label="已收款" value="1" />
+                <el-option label="未收款" value="0" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="收款方式">
               <el-select v-model="driverQuery.paid_method" placeholder="全部" clearable style="width:120px">
                 <el-option label="转账" value="转账" />
@@ -181,6 +193,12 @@
               <el-select v-model="vehicleQuery.client_type" placeholder="全部" clearable style="width:120px">
                 <el-option label="个人包车" value="personal" />
                 <el-option label="单位包车" value="company" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="收款状态">
+              <el-select v-model="vehicleQuery.is_paid" placeholder="全部" clearable style="width:100px">
+                <el-option label="已收款" value="1" />
+                <el-option label="未收款" value="0" />
               </el-select>
             </el-form-item>
             <el-form-item label="收款方式">
@@ -268,15 +286,15 @@ import * as XLSX from 'xlsx'
 
 const activeTab = ref('client')
 
-const clientQuery = ref({ client: '', client_type: '', paid_method: '', month: '', year: '', dateRange: null })
+const clientQuery = ref({ client: '', client_type: '', paid_method: '', is_paid: '', month: '', year: '', dateRange: null })
 const clientTasks = ref([])
 const clientSummary = ref(null)
 
-const driverQuery = ref({ driver_id: null, client_type: '', paid_method: '', month: '', year: '', dateRange: null })
+const driverQuery = ref({ driver_id: null, client_type: '', paid_method: '', is_paid: '', month: '', year: '', dateRange: null })
 const driverResults = ref([])
 const allDrivers = ref([])
 
-const vehicleQuery = ref({ vehicle_id: null, client_type: '', paid_method: '', month: '', year: '', dateRange: null })
+const vehicleQuery = ref({ vehicle_id: null, client_type: '', paid_method: '', is_paid: '', month: '', year: '', dateRange: null })
 const vehicleResults = ref([])
 const allVehicles = ref([])
 
@@ -284,6 +302,7 @@ const queryByClient = async () => {
   const params = { client: clientQuery.value.client }
   if (clientQuery.value.client_type) params.client_type = clientQuery.value.client_type
   if (clientQuery.value.paid_method) params.paid_method = clientQuery.value.paid_method
+  if (clientQuery.value.is_paid) params.is_paid = clientQuery.value.is_paid
   if (clientQuery.value.month) params.month = clientQuery.value.month
   if (clientQuery.value.year) params.year = clientQuery.value.year
   if (clientQuery.value.dateRange) {
@@ -302,6 +321,7 @@ const queryByDriver = async () => {
   if (driverQuery.value.driver_id) params.driver_id = driverQuery.value.driver_id
   if (driverQuery.value.client_type) params.client_type = driverQuery.value.client_type
   if (driverQuery.value.paid_method) params.paid_method = driverQuery.value.paid_method
+  if (driverQuery.value.is_paid) params.is_paid = driverQuery.value.is_paid
   if (driverQuery.value.month) params.month = driverQuery.value.month
   if (driverQuery.value.year) params.year = driverQuery.value.year
   if (driverQuery.value.dateRange) {
@@ -319,6 +339,7 @@ const queryByVehicle = async () => {
   if (vehicleQuery.value.vehicle_id) params.vehicle_id = vehicleQuery.value.vehicle_id
   if (vehicleQuery.value.client_type) params.client_type = vehicleQuery.value.client_type
   if (vehicleQuery.value.paid_method) params.paid_method = vehicleQuery.value.paid_method
+  if (vehicleQuery.value.is_paid) params.is_paid = vehicleQuery.value.is_paid
   if (vehicleQuery.value.month) params.month = vehicleQuery.value.month
   if (vehicleQuery.value.year) params.year = vehicleQuery.value.year
   if (vehicleQuery.value.dateRange) {

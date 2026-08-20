@@ -1525,6 +1525,7 @@ def report_by_client():
     client = request.args.get('client', '')
     client_type = request.args.get('client_type', '')
     paid_method = request.args.get('paid_method', '')
+    is_paid = request.args.get('is_paid', '')
     month = request.args.get('month', '')
     year = request.args.get('year', '')
     start_date = request.args.get('start_date', '')
@@ -1537,6 +1538,10 @@ def report_by_client():
         query = query.filter(Task.client_name.like(f'%{client}%'))
     if paid_method:
         query = query.filter(Task.paid_method == paid_method)
+    if is_paid == '1':
+        query = query.filter(Task.is_paid == True)
+    elif is_paid == '0':
+        query = query.filter(Task.is_paid == False)
     if month:
         query = query.filter(db.func.date_format(Task.departure_time, '%Y-%m') == month)
     if year:
@@ -1573,6 +1578,7 @@ def report_by_driver():
     driver_id = request.args.get('driver_id', type=int)
     client_type = request.args.get('client_type', '')
     paid_method = request.args.get('paid_method', '')
+    is_paid = request.args.get('is_paid', '')
     month = request.args.get('month', '')
     year = request.args.get('year', '')
     start_date = request.args.get('start_date', '')
@@ -1585,6 +1591,10 @@ def report_by_driver():
         query = query.filter(Task.driver_id == driver_id)
     if paid_method:
         query = query.filter(Task.paid_method == paid_method)
+    if is_paid == '1':
+        query = query.filter(Task.is_paid == True)
+    elif is_paid == '0':
+        query = query.filter(Task.is_paid == False)
     if month:
         query = query.filter(db.func.date_format(Task.departure_time, '%Y-%m') == month)
     if year:
@@ -1626,6 +1636,7 @@ def report_by_vehicle():
     vehicle_id = request.args.get('vehicle_id', type=int)
     client_type = request.args.get('client_type', '')
     paid_method = request.args.get('paid_method', '')
+    is_paid = request.args.get('is_paid', '')
     month = request.args.get('month', '')
     year = request.args.get('year', '')
     start_date = request.args.get('start_date', '')
@@ -1638,6 +1649,10 @@ def report_by_vehicle():
         query = query.filter(Task.vehicle_id == vehicle_id)
     if paid_method:
         query = query.filter(Task.paid_method == paid_method)
+    if is_paid == '1':
+        query = query.filter(Task.is_paid == True)
+    elif is_paid == '0':
+        query = query.filter(Task.is_paid == False)
     if month:
         query = query.filter(db.func.date_format(Task.departure_time, '%Y-%m') == month)
     if year:
