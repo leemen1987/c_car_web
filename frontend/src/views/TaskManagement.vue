@@ -718,7 +718,10 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRoute } from 'vue-router'
 import api from '../utils/api'
+
+const route = useRoute()
 
 const isMobile = ref(false)
 const checkMobile = () => { isMobile.value = window.innerWidth <= 768 }
@@ -1298,7 +1301,15 @@ const showConfirmDetail = async (row) => {
   }
 }
 
-onMounted(() => { loadTasks(); loadLaborRates(); loadClients(); loadVehicles(); loadFuelRates() })
+onMounted(async () => {
+  await loadTasks()
+  loadLaborRates(); loadClients(); loadVehicles(); loadFuelRates()
+  const editId = route.query.edit
+  if (editId) {
+    const task = tasks.value.find(t => t.id === Number(editId))
+    if (task) showEditDialog(task)
+  }
+})
 </script>
 
 <style scoped>

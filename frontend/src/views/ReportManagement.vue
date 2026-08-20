@@ -7,17 +7,15 @@
             <el-icon :size="20"><DataAnalysis /></el-icon>
             <span>报表管理</span>
           </div>
+          <el-button text size="small" @click="showSearch = !showSearch">
+            {{ showSearch ? '收起筛选' : '展开筛选' }} <el-icon><ArrowUp v-if="showSearch" /><ArrowDown v-else /></el-icon>
+          </el-button>
         </div>
       </template>
 
       <el-tabs v-model="activeTab">
         <!-- 按用车单位查询 -->
         <el-tab-pane label="按用车单位查询" name="client">
-          <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-            <el-button text size="small" @click="showSearch = !showSearch">
-              {{ showSearch ? '收起筛选' : '展开筛选' }} <el-icon><ArrowUp v-if="showSearch" /><ArrowDown v-else /></el-icon>
-            </el-button>
-          </div>
           <el-form v-show="showSearch" :inline="true" style="margin-bottom:15px">
             <el-form-item label="包车类型">
               <el-select v-model="clientQuery.client_type" placeholder="全部" clearable style="width:120px">
@@ -99,6 +97,11 @@
                 </el-tag>
               </template>
             </el-table-column>
+            <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
+              <template #default="{ row }">
+                <el-button type="primary" size="small" link @click="router.push('/tasks?edit=' + row.id)">编辑</el-button>
+              </template>
+            </el-table-column>
             <el-table-column label="收款" width="120" align="center">
               <template #default="{ row }">
                 <template v-if="row.status === 'completed'">
@@ -122,11 +125,6 @@
 
         <!-- 按司机查询 -->
         <el-tab-pane label="按司机查询" name="driver">
-          <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-            <el-button text size="small" @click="showSearch = !showSearch">
-              {{ showSearch ? '收起筛选' : '展开筛选' }} <el-icon><ArrowUp v-if="showSearch" /><ArrowDown v-else /></el-icon>
-            </el-button>
-          </div>
           <el-form v-show="showSearch" :inline="true" style="margin-bottom:15px">
             <el-form-item label="包车类型">
               <el-select v-model="driverQuery.client_type" placeholder="全部" clearable style="width:120px">
@@ -194,6 +192,11 @@
               <el-table-column prop="departure_time" label="出车时间" min-width="150" />
               <el-table-column prop="labor_fee" label="预估人工费" width="100" align="right" />
               <el-table-column prop="actual_labor_fee" label="实际人工费" width="100" align="right" />
+              <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
+                <template #default="{ row }">
+                  <el-button type="primary" size="small" link @click="router.push('/tasks?edit=' + row.id)">编辑</el-button>
+                </template>
+              </el-table-column>
               <el-table-column label="收款" width="120" align="center">
                 <template #default="{ row }">
                   <template v-if="row.status === 'completed'">
@@ -218,11 +221,6 @@
 
         <!-- 按车辆查询 -->
         <el-tab-pane label="按车辆查询" name="vehicle">
-          <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-            <el-button text size="small" @click="showSearch = !showSearch">
-              {{ showSearch ? '收起筛选' : '展开筛选' }} <el-icon><ArrowUp v-if="showSearch" /><ArrowDown v-else /></el-icon>
-            </el-button>
-          </div>
           <el-form v-show="showSearch" :inline="true" style="margin-bottom:15px">
             <el-form-item label="包车类型">
               <el-select v-model="vehicleQuery.client_type" placeholder="全部" clearable style="width:120px">
@@ -297,6 +295,11 @@
                   <span :style="{ color: row.final_profit >= 0 ? '#67c23a' : '#f56c6c' }">{{ row.final_profit }}</span>
                 </template>
               </el-table-column>
+              <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
+                <template #default="{ row }">
+                  <el-button type="primary" size="small" link @click="router.push('/tasks?edit=' + row.id)">编辑</el-button>
+                </template>
+              </el-table-column>
               <el-table-column label="收款" width="120" align="center">
                 <template #default="{ row }">
                   <template v-if="row.status === 'completed'">
@@ -326,11 +329,15 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 import api from '../utils/api'
 import * as XLSX from 'xlsx'
 
+const router = useRouter()
 const activeTab = ref('client')
 const showSearch = ref(true)
+const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
+const canEdit = (row) => user.value.role === 'admin' || (user.value.permissions || []).includes('task')
 
 const clientQuery = ref({ client: '', client_type: '', paid_method: '', is_paid: '', month: '', year: '', dateRange: null })
 const clientTasks = ref([])
