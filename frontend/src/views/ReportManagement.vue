@@ -13,7 +13,12 @@
       <el-tabs v-model="activeTab">
         <!-- 按用车单位查询 -->
         <el-tab-pane label="按用车单位查询" name="client">
-          <el-form :inline="true" style="margin-bottom:15px">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+            <el-button text size="small" @click="showSearch = !showSearch">
+              {{ showSearch ? '收起筛选' : '展开筛选' }} <el-icon><ArrowUp v-if="showSearch" /><ArrowDown v-else /></el-icon>
+            </el-button>
+          </div>
+          <el-form v-show="showSearch" :inline="true" style="margin-bottom:15px">
             <el-form-item label="包车类型">
               <el-select v-model="clientQuery.client_type" placeholder="全部" clearable style="width:120px">
                 <el-option label="个人包车" value="personal" />
@@ -75,14 +80,6 @@
               </template>
             </el-table-column>
             <el-table-column prop="contact_name" label="联系人" width="90" />
-            <el-table-column label="确认情况" width="90" align="center">
-              <template #default="{ row }">
-                <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
-                <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
-                <el-tag v-else-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
-                <span v-else style="color:#c0c4cc">-</span>
-              </template>
-            </el-table-column>
             <el-table-column prop="departure" label="出发地点" min-width="100" />
             <el-table-column prop="destination" label="目的地" min-width="100" />
             <el-table-column prop="vehicle_plate" label="车牌号" min-width="100" />
@@ -102,12 +99,35 @@
                 </el-tag>
               </template>
             </el-table-column>
+            <el-table-column label="收款" width="120" align="center">
+              <template #default="{ row }">
+                <template v-if="row.status === 'completed'">
+                  <el-tag v-if="row.is_paid" type="success" size="small">已收款</el-tag>
+                  <el-tag v-else type="danger" size="small">未收款</el-tag>
+                  <div v-if="row.is_paid && row.paid_date" style="font-size:11px;color:#909399;margin-top:2px">{{ row.paid_date }} {{ row.paid_method || '' }}</div>
+                </template>
+                <span v-else style="color:#c0c4cc">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="确认情况" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
+                <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
+                <el-tag v-else-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
+                <span v-else style="color:#c0c4cc">-</span>
+              </template>
+            </el-table-column>
           </el-table>
         </el-tab-pane>
 
         <!-- 按司机查询 -->
         <el-tab-pane label="按司机查询" name="driver">
-          <el-form :inline="true" style="margin-bottom:15px">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+            <el-button text size="small" @click="showSearch = !showSearch">
+              {{ showSearch ? '收起筛选' : '展开筛选' }} <el-icon><ArrowUp v-if="showSearch" /><ArrowDown v-else /></el-icon>
+            </el-button>
+          </div>
+          <el-form v-show="showSearch" :inline="true" style="margin-bottom:15px">
             <el-form-item label="包车类型">
               <el-select v-model="driverQuery.client_type" placeholder="全部" clearable style="width:120px">
                 <el-option label="个人包车" value="personal" />
@@ -169,6 +189,21 @@
                 </template>
               </el-table-column>
               <el-table-column prop="contact_name" label="联系人" width="90" />
+              <el-table-column prop="departure" label="出发" min-width="80" />
+              <el-table-column prop="destination" label="目的" min-width="80" />
+              <el-table-column prop="departure_time" label="出车时间" min-width="150" />
+              <el-table-column prop="labor_fee" label="预估人工费" width="100" align="right" />
+              <el-table-column prop="actual_labor_fee" label="实际人工费" width="100" align="right" />
+              <el-table-column label="收款" width="120" align="center">
+                <template #default="{ row }">
+                  <template v-if="row.status === 'completed'">
+                    <el-tag v-if="row.is_paid" type="success" size="small">已收款</el-tag>
+                    <el-tag v-else type="danger" size="small">未收款</el-tag>
+                    <div v-if="row.is_paid && row.paid_date" style="font-size:11px;color:#909399;margin-top:2px">{{ row.paid_date }} {{ row.paid_method || '' }}</div>
+                  </template>
+                  <span v-else style="color:#c0c4cc">-</span>
+                </template>
+              </el-table-column>
               <el-table-column label="确认情况" width="90" align="center">
                 <template #default="{ row }">
                   <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
@@ -177,18 +212,18 @@
                   <span v-else style="color:#c0c4cc">-</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="departure" label="出发" min-width="80" />
-              <el-table-column prop="destination" label="目的" min-width="80" />
-              <el-table-column prop="departure_time" label="出车时间" min-width="150" />
-              <el-table-column prop="labor_fee" label="预估人工费" width="100" align="right" />
-              <el-table-column prop="actual_labor_fee" label="实际人工费" width="100" align="right" />
             </el-table>
           </div>
         </el-tab-pane>
 
         <!-- 按车辆查询 -->
         <el-tab-pane label="按车辆查询" name="vehicle">
-          <el-form :inline="true" style="margin-bottom:15px">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+            <el-button text size="small" @click="showSearch = !showSearch">
+              {{ showSearch ? '收起筛选' : '展开筛选' }} <el-icon><ArrowUp v-if="showSearch" /><ArrowDown v-else /></el-icon>
+            </el-button>
+          </div>
+          <el-form v-show="showSearch" :inline="true" style="margin-bottom:15px">
             <el-form-item label="包车类型">
               <el-select v-model="vehicleQuery.client_type" placeholder="全部" clearable style="width:120px">
                 <el-option label="个人包车" value="personal" />
@@ -252,14 +287,6 @@
                 </template>
               </el-table-column>
               <el-table-column prop="contact_name" label="联系人" width="90" />
-              <el-table-column label="确认情况" width="90" align="center">
-                <template #default="{ row }">
-                  <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
-                  <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
-                  <el-tag v-else-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
-                  <span v-else style="color:#c0c4cc">-</span>
-                </template>
-              </el-table-column>
               <el-table-column prop="departure" label="出发" min-width="80" />
               <el-table-column prop="destination" label="目的" min-width="80" />
               <el-table-column prop="departure_time" label="出车时间" min-width="155" />
@@ -268,6 +295,24 @@
               <el-table-column prop="final_profit" label="最终利润" width="100" align="right">
                 <template #default="{ row }">
                   <span :style="{ color: row.final_profit >= 0 ? '#67c23a' : '#f56c6c' }">{{ row.final_profit }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="收款" width="120" align="center">
+                <template #default="{ row }">
+                  <template v-if="row.status === 'completed'">
+                    <el-tag v-if="row.is_paid" type="success" size="small">已收款</el-tag>
+                    <el-tag v-else type="danger" size="small">未收款</el-tag>
+                    <div v-if="row.is_paid && row.paid_date" style="font-size:11px;color:#909399;margin-top:2px">{{ row.paid_date }} {{ row.paid_method || '' }}</div>
+                  </template>
+                  <span v-else style="color:#c0c4cc">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="确认情况" width="90" align="center">
+                <template #default="{ row }">
+                  <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
+                  <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
+                  <el-tag v-else-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
+                  <span v-else style="color:#c0c4cc">-</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -285,6 +330,7 @@ import api from '../utils/api'
 import * as XLSX from 'xlsx'
 
 const activeTab = ref('client')
+const showSearch = ref(true)
 
 const clientQuery = ref({ client: '', client_type: '', paid_method: '', is_paid: '', month: '', year: '', dateRange: null })
 const clientTasks = ref([])
