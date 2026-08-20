@@ -97,11 +97,6 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
-              <template #default="{ row }">
-                <el-button type="primary" size="small" link @click="router.push('/tasks?edit=' + row.id)">编辑</el-button>
-              </template>
-            </el-table-column>
             <el-table-column label="收款" width="120" align="center">
               <template #default="{ row }">
                 <template v-if="row.status === 'completed'">
@@ -118,6 +113,11 @@
                 <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
                 <el-tag v-else-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
                 <span v-else style="color:#c0c4cc">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
+              <template #default="{ row }">
+                <el-button size="small" plain @click="openEdit(row)">编辑</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -192,11 +192,6 @@
               <el-table-column prop="departure_time" label="出车时间" min-width="150" />
               <el-table-column prop="labor_fee" label="预估人工费" width="100" align="right" />
               <el-table-column prop="actual_labor_fee" label="实际人工费" width="100" align="right" />
-              <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
-                <template #default="{ row }">
-                  <el-button type="primary" size="small" link @click="router.push('/tasks?edit=' + row.id)">编辑</el-button>
-                </template>
-              </el-table-column>
               <el-table-column label="收款" width="120" align="center">
                 <template #default="{ row }">
                   <template v-if="row.status === 'completed'">
@@ -213,6 +208,11 @@
                   <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
                   <el-tag v-else-if="row.schedule_confirm_status === 'pending'" type="warning" size="small">待确认</el-tag>
                   <span v-else style="color:#c0c4cc">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
+                <template #default="{ row }">
+                  <el-button size="small" plain @click="openEdit(row)">编辑</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -295,11 +295,6 @@
                   <span :style="{ color: row.final_profit >= 0 ? '#67c23a' : '#f56c6c' }">{{ row.final_profit }}</span>
                 </template>
               </el-table-column>
-              <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
-                <template #default="{ row }">
-                  <el-button type="primary" size="small" link @click="router.push('/tasks?edit=' + row.id)">编辑</el-button>
-                </template>
-              </el-table-column>
               <el-table-column label="收款" width="120" align="center">
                 <template #default="{ row }">
                   <template v-if="row.status === 'completed'">
@@ -318,11 +313,59 @@
                   <span v-else style="color:#c0c4cc">-</span>
                 </template>
               </el-table-column>
+              <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
+                <template #default="{ row }">
+                  <el-button size="small" plain @click="openEdit(row)">编辑</el-button>
+                </template>
+              </el-table-column>
             </el-table>
           </div>
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <!-- 编辑任务弹窗 -->
+    <el-dialog v-model="editDialogVisible" title="编辑任务费用" width="500px">
+      <el-form :model="editForm" label-width="100px">
+        <el-form-item label="租车费(元)">
+          <el-input-number v-model="editForm.rental_fee" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="实际油电费">
+          <el-input-number v-model="editForm.actual_fuel_fee" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="实际桥路费">
+          <el-input-number v-model="editForm.actual_bridge_fee" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="实际人工费">
+          <el-input-number v-model="editForm.actual_labor_fee" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="其他费用">
+          <el-input-number v-model="editForm.other_fee" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="是否已收款">
+          <el-switch v-model="editForm.is_paid" />
+        </el-form-item>
+        <template v-if="editForm.is_paid">
+          <el-form-item label="收款日期">
+            <el-date-picker v-model="editForm.paid_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+          </el-form-item>
+          <el-form-item label="收款方式">
+            <el-select v-model="editForm.paid_method" style="width:100%">
+              <el-option label="转账" value="转账" />
+              <el-option label="二维码" value="二维码" />
+              <el-option label="现金" value="现金" />
+            </el-select>
+          </el-form-item>
+        </template>
+        <el-form-item label="备注">
+          <el-input v-model="editForm.remark" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveEdit">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -337,7 +380,37 @@ const router = useRouter()
 const activeTab = ref('client')
 const showSearch = ref(true)
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
-const canEdit = (row) => user.value.role === 'admin' || (user.value.permissions || []).includes('task')
+const canEdit = () => user.value.role === 'admin' || (user.value.permissions || []).includes('report_edit')
+
+const editDialogVisible = ref(false)
+const editForm = ref({ id: null, rental_fee: 0, actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, is_paid: false, paid_date: '', paid_method: '', remark: '' })
+
+const openEdit = (row) => {
+  editForm.value = {
+    id: row.id,
+    rental_fee: row.rental_fee || 0,
+    actual_fuel_fee: row.actual_fuel_fee || 0,
+    actual_bridge_fee: row.actual_bridge_fee || 0,
+    actual_labor_fee: row.actual_labor_fee || 0,
+    other_fee: row.other_fee || 0,
+    is_paid: row.is_paid || false,
+    paid_date: row.paid_date || '',
+    paid_method: row.paid_method || '',
+    remark: row.remark || ''
+  }
+  editDialogVisible.value = true
+}
+
+const saveEdit = async () => {
+  try {
+    await api.put(`/tasks/${editForm.value.id}`, editForm.value)
+    ElMessage.success('保存成功')
+    editDialogVisible.value = false
+    if (activeTab.value === 'client') queryByClient()
+    else if (activeTab.value === 'driver') queryByDriver()
+    else if (activeTab.value === 'vehicle') queryByVehicle()
+  } catch (e) {}
+}
 
 const clientQuery = ref({ client: '', client_type: '', paid_method: '', is_paid: '', month: '', year: '', dateRange: null })
 const clientTasks = ref([])

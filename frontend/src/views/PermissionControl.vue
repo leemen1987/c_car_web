@@ -64,6 +64,7 @@
             <el-checkbox label="vehicle">车辆管理</el-checkbox>
             <el-checkbox label="labor_rate">差费标准</el-checkbox>
             <el-checkbox label="report">报表管理</el-checkbox>
+            <el-checkbox label="report_edit">报表编辑</el-checkbox>
             <el-checkbox label="permission">权限控制</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
@@ -90,7 +91,7 @@ const currentUserId = ref(JSON.parse(localStorage.getItem('user') || '{}').id)
 const userForm = ref({ username: '', password: '', role: 'user', permissions: [] })
 
 const permLabel = (p) => {
-  const map = { task: '任务管理', client: '用车单位', driver: '司机管理', vehicle: '车辆管理', labor_rate: '差费标准', report: '报表管理', permission: '权限控制' }
+  const map = { task: '任务管理', client: '用车单位', driver: '司机管理', vehicle: '车辆管理', labor_rate: '差费标准', report: '报表管理', report_edit: '报表编辑', permission: '权限控制' }
   return map[p] || p
 }
 

@@ -80,6 +80,26 @@ def admin_required(f):
     return decorated
 
 
+def permission_required(*perms):
+    """Check if user has at least one of the specified permissions."""
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if 'user_id' not in session:
+                return jsonify({'code': 401, 'msg': '请先登录'}), 401
+            user = User.query.get(session['user_id'])
+            if not user:
+                return jsonify({'code': 401, 'msg': '请先登录'}), 401
+            if user.role == 'admin':
+                return f(*args, **kwargs)
+            user_perms = user.get_permissions()
+            if any(p in user_perms for p in perms):
+                return f(*args, **kwargs)
+            return jsonify({'code': 403, 'msg': '权限不足'}), 403
+        return decorated
+    return decorator
+
+
 # ==================== Auth ====================
 
 @app.route('/api/login', methods=['POST'])
@@ -833,7 +853,7 @@ def create_task():
 
 
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
-@login_required
+@permission_required('task', 'report_edit')
 def update_task(task_id):
     task = Task.query.get(task_id)
     if not task:
