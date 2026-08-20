@@ -97,8 +97,8 @@
             </el-table-column>
             <el-table-column prop="status" label="状态" width="90" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.status === 'completed' ? 'success' : row.status === 'scheduled' ? 'primary' : 'warning'">
-                  {{ row.status === 'completed' ? '已完成' : row.status === 'scheduled' ? '已排班' : '待排班' }}
+                <el-tag :type="row.status === 'completed' ? 'success' : row.status === 'scheduled' ? 'primary' : row.status === 'cancelled' ? 'danger' : 'warning'">
+                  {{ row.status === 'completed' ? '已完成' : row.status === 'scheduled' ? '已排班' : row.status === 'cancelled' ? '已取消' : '待排班' }}
                 </el-tag>
               </template>
             </el-table-column>

@@ -1531,7 +1531,7 @@ def report_by_client():
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
 
-    query = Task.query
+    query = Task.query.filter(Task.status != 'cancelled')
     if client_type:
         query = query.filter(Task.client_type == client_type)
     if client:
@@ -1584,7 +1584,7 @@ def report_by_driver():
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
 
-    query = Task.query.filter(Task.driver_id.isnot(None))
+    query = Task.query.filter(Task.driver_id.isnot(None), Task.status != 'cancelled')
     if client_type:
         query = query.filter(Task.client_type == client_type)
     if driver_id:
@@ -1642,7 +1642,7 @@ def report_by_vehicle():
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
 
-    query = Task.query.filter(Task.vehicle_id.isnot(None))
+    query = Task.query.filter(Task.vehicle_id.isnot(None), Task.status != 'cancelled')
     if client_type:
         query = query.filter(Task.client_type == client_type)
     if vehicle_id:
