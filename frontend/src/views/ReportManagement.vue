@@ -115,7 +115,7 @@
                 <span v-else style="color:#c0c4cc">-</span>
               </template>
             </el-table-column>
-            <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
+            <el-table-column v-if="canEdit()" label="操作" width="80" align="center">
               <template #default="{ row }">
                 <el-button size="small" plain @click="openEdit(row)">编辑</el-button>
               </template>
@@ -210,7 +210,7 @@
                   <span v-else style="color:#c0c4cc">-</span>
                 </template>
               </el-table-column>
-              <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
+              <el-table-column v-if="canEdit()" label="操作" width="80" align="center">
                 <template #default="{ row }">
                   <el-button size="small" plain @click="openEdit(row)">编辑</el-button>
                 </template>
@@ -313,7 +313,7 @@
                   <span v-else style="color:#c0c4cc">-</span>
                 </template>
               </el-table-column>
-              <el-table-column v-if="canEdit()" label="操作" width="70" align="center">
+              <el-table-column v-if="canEdit()" label="操作" width="80" align="center">
                 <template #default="{ row }">
                   <el-button size="small" plain @click="openEdit(row)">编辑</el-button>
                 </template>
