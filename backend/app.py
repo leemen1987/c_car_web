@@ -917,6 +917,9 @@ def create_task():
     task.estimated_cost = task.fuel_fee + task.bridge_fee + task.labor_fee
     task.estimated_profit = task.rental_fee - task.estimated_cost
     db.session.add(task)
+    db.session.flush()
+    # 自动生成任务编号：TASK-YYYYMMDD-ID
+    task.task_no = f'TASK-{task.created_at.strftime("%Y%m%d")}-{task.id}'
     db.session.commit()
     return jsonify({'code': 200, 'msg': '任务创建成功', 'data': task.to_dict()})
 
@@ -2466,6 +2469,11 @@ def init_db():
     ], ensure_ascii=False)
     if not SystemConfig.query.get('fuel_rates'):
         db.session.add(SystemConfig(key='fuel_rates', value=default_fuel_rates))
+
+    # 为已有任务生成任务编号
+    tasks_without_no = Task.query.filter((Task.task_no == '') | (Task.task_no.is_(None))).all()
+    for t in tasks_without_no:
+        t.task_no = f'TASK-{t.created_at.strftime("%Y%m%d")}-{t.id}'
 
     # Create admin if not exists
     if not User.query.filter_by(username='admin').first():
