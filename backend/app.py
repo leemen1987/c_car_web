@@ -4,7 +4,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from models import db, User, Driver, Vehicle, VehicleCompany, Task, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot, LongRentalContract, LongRentalBill, SystemConfig
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from functools import wraps
 import json
 import time
@@ -258,6 +258,56 @@ def delete_driver(driver_id):
     return jsonify({'code': 200, 'msg': '删除成功'})
 
 
+@app.route('/api/drivers/settlement-stats')
+@login_required
+def driver_settlement_stats():
+    """获取所有司机在当前结算周期内的费用统计"""
+    settlement_start, settlement_end = get_settlement_range()
+    start_dt = datetime.combine(settlement_start, datetime.min.time())
+    end_dt = datetime.combine(settlement_end, datetime.max.time())
+
+    drivers = Driver.query.filter(Driver.status != 'inactive').all()
+    result = []
+    for driver in drivers:
+        tasks = Task.query.filter(
+            Task.driver_id == driver.id,
+            Task.status.in_(['completed', 'scheduled']),
+            Task.departure_time >= start_dt,
+            Task.departure_time <= end_dt
+        ).all()
+        total_actual = sum(t.actual_labor_fee for t in tasks if t.status == 'completed')
+        total_estimated = sum(t.labor_fee for t in tasks if t.status == 'scheduled')
+        task_details = [{
+            'id': t.id,
+            'departure': t.departure,
+            'destination': t.destination,
+            'departure_time': t.departure_time.strftime('%Y-%m-%d %H:%M') if t.departure_time else '',
+            'client_name': t.client_name,
+            'labor_fee': t.labor_fee,
+            'actual_labor_fee': t.actual_labor_fee,
+            'status': t.status
+        } for t in sorted(tasks, key=lambda x: x.departure_time or datetime.min, reverse=True)]
+        result.append({
+            'driver_id': driver.id,
+            'driver_name': driver.name,
+            'driver_phone': driver.phone,
+            'task_count': len(tasks),
+            'total_actual_labor_fee': total_actual,
+            'total_estimated_labor_fee': total_estimated,
+            'total_fee': total_actual + total_estimated,
+            'tasks': task_details
+        })
+
+    return jsonify({
+        'code': 200,
+        'data': {
+            'drivers': result,
+            'settlement_start': settlement_start.strftime('%m月%d日'),
+            'settlement_end': settlement_end.strftime('%m月%d日')
+        }
+    })
+
+
 # ==================== Vehicles ====================
 
 @app.route('/api/vehicles', methods=['GET'])
@@ -265,6 +315,25 @@ def delete_driver(driver_id):
 def list_vehicles():
     vehicles = Vehicle.query.all()
     return jsonify({'code': 200, 'data': [v.to_dict() for v in vehicles]})
+
+
+def get_settlement_range(today=None):
+    """返回当前结算周期 (start_date, end_date)，每月26日至次月25日"""
+    if today is None:
+        today = date.today()
+    if today.day >= 26:
+        start = today.replace(day=26)
+        if today.month == 12:
+            end = today.replace(year=today.year + 1, month=1, day=25)
+        else:
+            end = today.replace(month=today.month + 1, day=25)
+    else:
+        if today.month == 1:
+            start = today.replace(year=today.year - 1, month=12, day=26)
+        else:
+            start = today.replace(month=today.month - 1, day=26)
+        end = today.replace(day=25)
+    return start, end
 
 
 def _parse_date(val):
@@ -1005,21 +1074,30 @@ def get_available_resources(task_id):
     )
     available_drivers = available_drivers_query.all()
 
-    # Calculate total labor fee earned by each driver and sort ascending
+    # Calculate settlement period labor fee for each driver
+    settlement_start, settlement_end = get_settlement_range()
+    start_dt = datetime.combine(settlement_start, datetime.min.time())
+    end_dt = datetime.combine(settlement_end, datetime.max.time())
+
     driver_fees = {}
     for driver in available_drivers:
+        # Completed tasks in settlement period (by departure_time)
         total_fee = db.session.query(
             db.func.coalesce(db.func.sum(Task.actual_labor_fee), 0)
         ).filter(
             Task.driver_id == driver.id,
-            Task.status == 'completed'
+            Task.status == 'completed',
+            Task.departure_time >= start_dt,
+            Task.departure_time <= end_dt
         ).scalar()
-        # Also include scheduled tasks labor fee
+        # Scheduled tasks in settlement period
         scheduled_fee = db.session.query(
             db.func.coalesce(db.func.sum(Task.labor_fee), 0)
         ).filter(
             Task.driver_id == driver.id,
-            Task.status == 'scheduled'
+            Task.status == 'scheduled',
+            Task.departure_time >= start_dt,
+            Task.departure_time <= end_dt
         ).scalar()
         driver_fees[driver.id] = float(total_fee) + float(scheduled_fee)
 
@@ -1035,7 +1113,9 @@ def get_available_resources(task_id):
                 'total_labor_fee': driver_fees.get(d.id, 0)
             } for d in sorted_drivers],
             'task_start': task_start.strftime('%Y-%m-%d %H:%M'),
-            'task_end': task_end.strftime('%Y-%m-%d %H:%M')
+            'task_end': task_end.strftime('%Y-%m-%d %H:%M'),
+            'settlement_start': settlement_start.strftime('%m月%d日'),
+            'settlement_end': settlement_end.strftime('%m月%d日')
         }
     })
 

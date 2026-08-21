@@ -402,8 +402,9 @@
           </el-select>
         </el-form-item>
         <el-form-item label="选择司机">
+          <div v-if="scheduleInfo.settlement_start" style="color:#909399;font-size:12px;margin-bottom:4px">结算周期：{{ scheduleInfo.settlement_start }}-{{ scheduleInfo.settlement_end }}</div>
           <el-select v-model="scheduleForm.driver_id" placeholder="请选择司机" style="width:100%">
-            <el-option v-for="d in scheduleInfo.drivers" :key="d.id" :label="d.name + ' (' + d.phone + ') - 已获人工费: ¥' + d.total_labor_fee" :value="d.id" />
+            <el-option v-for="d in scheduleInfo.drivers" :key="d.id" :label="d.name + ' (' + d.phone + ') - 本月结算: ¥' + d.total_labor_fee" :value="d.id" />
           </el-select>
         </el-form-item>
       </el-form>
