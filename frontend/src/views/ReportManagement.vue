@@ -41,6 +41,12 @@
                 <el-option label="现金" value="现金" />
               </el-select>
             </el-form-item>
+            <el-form-item label="是否开票">
+              <el-select v-model="clientQuery.is_invoiced" placeholder="全部" clearable style="width:100px">
+                <el-option label="已开票" value="1" />
+                <el-option label="未开票" value="0" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="用车单位">
               <el-input v-model="clientQuery.client" placeholder="输入单位名称" clearable />
             </el-form-item>
@@ -150,6 +156,12 @@
                 <el-option label="现金" value="现金" />
               </el-select>
             </el-form-item>
+            <el-form-item label="是否开票">
+              <el-select v-model="driverQuery.is_invoiced" placeholder="全部" clearable style="width:100px">
+                <el-option label="已开票" value="1" />
+                <el-option label="未开票" value="0" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="司机">
               <el-select v-model="driverQuery.driver_id" placeholder="选择司机" clearable style="width:200px">
                 <el-option v-for="d in allDrivers" :key="d.id" :label="d.name + ' (' + d.phone + ')'" :value="d.id" />
@@ -244,6 +256,12 @@
                 <el-option label="转账" value="转账" />
                 <el-option label="二维码" value="二维码" />
                 <el-option label="现金" value="现金" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="是否开票">
+              <el-select v-model="vehicleQuery.is_invoiced" placeholder="全部" clearable style="width:100px">
+                <el-option label="已开票" value="1" />
+                <el-option label="未开票" value="0" />
               </el-select>
             </el-form-item>
             <el-form-item label="车辆">
@@ -448,15 +466,15 @@ const saveEdit = async () => {
   } catch (e) {}
 }
 
-const clientQuery = ref({ client: '', client_type: '', paid_method: '', is_paid: '', month: '', year: '', dateRange: null })
+const clientQuery = ref({ client: '', client_type: '', paid_method: '', is_paid: '', is_invoiced: '', month: '', year: '', dateRange: null })
 const clientTasks = ref([])
 const clientSummary = ref(null)
 
-const driverQuery = ref({ driver_id: null, client_type: '', paid_method: '', is_paid: '', month: '', year: '', dateRange: null })
+const driverQuery = ref({ driver_id: null, client_type: '', paid_method: '', is_paid: '', is_invoiced: '', month: '', year: '', dateRange: null })
 const driverResults = ref([])
 const allDrivers = ref([])
 
-const vehicleQuery = ref({ vehicle_id: null, client_type: '', paid_method: '', is_paid: '', month: '', year: '', dateRange: null })
+const vehicleQuery = ref({ vehicle_id: null, client_type: '', paid_method: '', is_paid: '', is_invoiced: '', month: '', year: '', dateRange: null })
 const vehicleResults = ref([])
 const allVehicles = ref([])
 
@@ -465,6 +483,7 @@ const queryByClient = async () => {
   if (clientQuery.value.client_type) params.client_type = clientQuery.value.client_type
   if (clientQuery.value.paid_method) params.paid_method = clientQuery.value.paid_method
   if (clientQuery.value.is_paid) params.is_paid = clientQuery.value.is_paid
+  if (clientQuery.value.is_invoiced) params.is_invoiced = clientQuery.value.is_invoiced
   if (clientQuery.value.month) params.month = clientQuery.value.month
   if (clientQuery.value.year) params.year = clientQuery.value.year
   if (clientQuery.value.dateRange) {
@@ -484,6 +503,7 @@ const queryByDriver = async () => {
   if (driverQuery.value.client_type) params.client_type = driverQuery.value.client_type
   if (driverQuery.value.paid_method) params.paid_method = driverQuery.value.paid_method
   if (driverQuery.value.is_paid) params.is_paid = driverQuery.value.is_paid
+  if (driverQuery.value.is_invoiced) params.is_invoiced = driverQuery.value.is_invoiced
   if (driverQuery.value.month) params.month = driverQuery.value.month
   if (driverQuery.value.year) params.year = driverQuery.value.year
   if (driverQuery.value.dateRange) {
@@ -502,6 +522,7 @@ const queryByVehicle = async () => {
   if (vehicleQuery.value.client_type) params.client_type = vehicleQuery.value.client_type
   if (vehicleQuery.value.paid_method) params.paid_method = vehicleQuery.value.paid_method
   if (vehicleQuery.value.is_paid) params.is_paid = vehicleQuery.value.is_paid
+  if (vehicleQuery.value.is_invoiced) params.is_invoiced = vehicleQuery.value.is_invoiced
   if (vehicleQuery.value.month) params.month = vehicleQuery.value.month
   if (vehicleQuery.value.year) params.year = vehicleQuery.value.year
   if (vehicleQuery.value.dateRange) {
