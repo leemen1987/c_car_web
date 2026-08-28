@@ -907,6 +907,7 @@ def create_task():
         rental_days=rental_days,
         vehicle_type=data.get('vehicle_type', ''),
         vehicle_count=data.get('vehicle_count', 1),
+        self_drive=data.get('self_drive', False),
         mileage=data.get('mileage', 0),
         rental_fee=data.get('rental_fee', 0),
         fuel_fee=data.get('fuel_fee', 0),
@@ -2471,6 +2472,7 @@ def init_db():
         ('start_mileage', "FLOAT DEFAULT 0"),
         ('end_mileage', "FLOAT DEFAULT 0"),
         ('vehicle_count', "INT DEFAULT 1"),
+        ('self_drive', "TINYINT DEFAULT 0"),
     ]:
         try:
             db.session.execute(db.text(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}"))

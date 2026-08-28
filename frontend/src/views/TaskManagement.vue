@@ -36,9 +36,9 @@
         </el-table-column>
         <el-table-column label="用车方" min-width="120">
           <template #default="{ row }">
-            <el-tag v-if="row.client_type === 'selfdrive'" type="info" size="small">自驾车</el-tag>
-            <span v-else-if="row.client_type === 'company'" style="font-weight:600">{{ row.client_company }}</span>
+            <span v-if="row.client_type === 'company'" style="font-weight:600">{{ row.client_company }}</span>
             <span v-else>{{ row.client_name }}</span>
+            <el-tag v-if="row.self_drive" type="info" size="small" style="margin-left:4px">自驾车</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="联系人" min-width="120">
@@ -272,8 +272,8 @@
               <el-radio-group v-model="taskForm.client_type" @change="onClientTypeChange">
                 <el-radio value="personal">个人</el-radio>
                 <el-radio value="company">单位</el-radio>
-                <el-radio value="selfdrive">自驾车</el-radio>
               </el-radio-group>
+              <el-checkbox v-model="taskForm.self_drive" style="margin-left:16px">自驾车</el-checkbox>
             </el-form-item>
           </el-col>
         </el-row>
@@ -305,73 +305,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <template v-if="taskForm.client_type === 'selfdrive'">
-          <el-row :gutter="isMobile ? 0 : 20">
-            <el-col :span="isMobile ? 24 : 12">
-              <el-form-item label="姓名">
-                <el-input v-model="taskForm.client_name" placeholder="请输入姓名" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="isMobile ? 24 : 12">
-              <el-form-item label="手机号码">
-                <el-input v-model="taskForm.client_phone" placeholder="请输入手机号码" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="isMobile ? 0 : 20">
-            <el-col :span="isMobile ? 24 : 12">
-              <el-form-item label="核定载人数">
-                <el-select v-model="taskForm.vehicle_type" placeholder="请选择核定载人数" style="width:100%" filterable allow-create @change="onCapacityChange">
-                  <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="isMobile ? 0 : 20">
-            <el-col :span="isMobile ? 24 : 12">
-              <el-form-item label="出车时间">
-                <el-date-picker v-model="taskForm.departure_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" :disabled-date="disablePastDates" @change="onDepartureTimeChange" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="isMobile ? 24 : 12">
-              <el-form-item label="回程时间">
-                <el-date-picker v-model="taskForm.return_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" :disabled-date="disableBeforeDeparture" @change="onTimeChange" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="isMobile ? 0 : 20">
-            <el-col :span="isMobile ? 24 : 12">
-              <el-form-item label="租用天数">
-                <el-input :model-value="computedRentalDays" disabled />
-              </el-form-item>
-            </el-col>
-            <el-col :span="isMobile ? 24 : 12">
-              <el-form-item label="租车费(元)">
-                <el-input-number v-model="taskForm.rental_fee" :min="0" :precision="2" style="width:100%" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="isMobile ? 0 : 20">
-            <el-col :span="isMobile ? 24 : 12">
-              <el-form-item label="预计成本">
-                <el-input :model-value="estimatedCost" disabled />
-              </el-form-item>
-            </el-col>
-            <el-col :span="isMobile ? 24 : 12">
-              <el-form-item label="预估利润">
-                <el-input :model-value="estimatedProfit" disabled />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="isMobile ? 0 : 20">
-            <el-col :span="24">
-              <el-form-item label="备注">
-                <el-input v-model="taskForm.remark" type="textarea" :rows="2" placeholder="选填" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </template>
-        <template v-else>
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="核定载人数">
@@ -386,6 +319,7 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <template v-if="!taskForm.self_drive">
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="出发地点">
@@ -398,6 +332,7 @@
             </el-form-item>
           </el-col>
         </el-row>
+        </template>
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="出车时间">
@@ -474,7 +409,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-        </template>
       </el-form>
       <template #footer>
         <el-button @click="taskDialogVisible = false">取消</el-button>
@@ -502,10 +436,10 @@
         
         <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
           <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
-          <el-select v-model="a.vehicle_id" placeholder="选择车辆" style="flex:1" filterable>
+          <el-select v-model="a.vehicle_id" placeholder="选择车辆" :style="{ flex: currentScheduleTask?.self_drive ? 1 : 1 }" filterable>
             <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
           </el-select>
-          <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
+          <el-select v-if="!currentScheduleTask?.self_drive" v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
             <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id" />
           </el-select>
         </div>
@@ -995,7 +929,7 @@ const canSubmitApproval = (row) => {
 const taskForm = ref({
   client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null,
   departure: '', destination: '', departure_time: '', return_time: '',
-  vehicle_type: '', vehicle_count: 1, mileage: 0, rental_fee: 0,
+  vehicle_type: '', vehicle_count: 1, self_drive: false, mileage: 0, rental_fee: 0,
   fuel_fee: 0, bridge_fee: 0, labor_fee: 0, remark: ''
 })
 
@@ -1058,7 +992,7 @@ const loadTasks = async () => {
 const showAddDialog = () => {
   isEdit.value = false
   editId.value = null
-  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
+  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, self_drive: false, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
   taskDialogVisible.value = true
 }
 
@@ -1087,15 +1021,9 @@ const submitTask = async () => {
     ElMessage.warning('请选择用车单位和联系人')
     return
   }
-  if (taskForm.value.client_type === 'selfdrive' && (!taskForm.value.client_name || !taskForm.value.client_phone)) {
-    ElMessage.warning('请填写姓名和手机号码')
+  if (!taskForm.value.self_drive && (!taskForm.value.departure || !taskForm.value.destination)) {
+    ElMessage.warning('请填写出发地和目的地')
     return
-  }
-  if (taskForm.value.client_type !== 'selfdrive') {
-    if (!taskForm.value.departure || !taskForm.value.destination) {
-      ElMessage.warning('请填写出发地和目的地')
-      return
-    }
   }
   if (!taskForm.value.departure_time || !taskForm.value.return_time) {
     ElMessage.warning('请填写出车和回程时间')
@@ -1163,11 +1091,16 @@ const getAvailableDrivers = (currentIdx) => {
 }
 
 const submitSchedule = async () => {
+  const isSelfDrive = currentScheduleTask.value?.self_drive
   // 验证所有分配都已填写
   for (let i = 0; i < scheduleAssignments.value.length; i++) {
     const a = scheduleAssignments.value[i]
-    if (!a.vehicle_id || !a.driver_id) {
-      ElMessage.warning(`请为第${i + 1}台车选择车辆和司机`)
+    if (!a.vehicle_id) {
+      ElMessage.warning(`请为第${i + 1}台车选择车辆`)
+      return
+    }
+    if (!isSelfDrive && !a.driver_id) {
+      ElMessage.warning(`请为第${i + 1}台车选择司机`)
       return
     }
   }
