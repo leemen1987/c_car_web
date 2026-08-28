@@ -34,12 +34,14 @@
             <el-tag v-else-if="row.status === 'cancelled'" type="danger">已取消</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="用车方" min-width="120" align="center">
+        <el-table-column label="用车方" min-width="120">
           <template #default="{ row }">
-            <div style="display:flex;align-items:center;justify-content:center;gap:4px">
-              <span v-if="row.client_type === 'company'" style="font-weight:600">{{ row.client_company }}</span>
-              <span v-else>{{ row.client_name }}</span>
-              <el-tag v-if="row.self_drive" type="info" size="small">自驾车</el-tag>
+            <div style="text-align:center">
+              <div>
+                <span v-if="row.client_type === 'company'" style="font-weight:600">{{ row.client_company }}</span>
+                <span v-else>{{ row.client_name }}</span>
+              </div>
+              <el-tag v-if="row.self_drive" type="info" size="small" style="margin-top:2px">自驾车</el-tag>
             </div>
           </template>
         </el-table-column>
@@ -63,12 +65,12 @@
             </div>
             <span v-else-if="row.vehicle_plate">{{ row.vehicle_plate }}</span>
             <span v-else style="color:#909399">未排班</span>
-            <el-tag v-if="row.vehicle_count > 1" size="small" type="info" style="margin-top:2px">{{ row.vehicle_count }}台</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="驾驶司机" min-width="140">
           <template #default="{ row }">
-            <div v-if="row.task_vehicles && row.task_vehicles.length > 1">
+            <span v-if="row.self_drive" style="color:#909399">自驾车</span>
+            <div v-else-if="row.task_vehicles && row.task_vehicles.length > 1">
               <div v-for="(tv, idx) in row.task_vehicles" :key="idx" style="font-size:12px;line-height:1.4">
                 {{ idx + 1 }}. {{ tv.driver_name || '待分配' }}
               </div>
