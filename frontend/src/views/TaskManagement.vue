@@ -424,6 +424,7 @@
         <el-form-item label="出车时间">
           <el-input :model-value="scheduleInfo.task_start + ' ~ ' + scheduleInfo.task_end" disabled />
         </el-form-item>
+        <template v-if="!currentScheduleTask?.self_drive">
         <el-form-item label="目的地">
           <el-tag>{{ scheduleInfo.destination }}</el-tag>
         </el-form-item>
@@ -433,18 +434,26 @@
         <el-form-item v-if="scheduleInfo.settlement_start" label="结算周期">
           <span style="color:#909399;font-size:13px">{{ scheduleInfo.settlement_start }}-{{ scheduleInfo.settlement_end }}</span>
         </el-form-item>
+        </template>
         
-        <el-divider content-position="left">车辆分配（{{ scheduleAssignments.length }}台）</el-divider>
+        <el-divider content-position="left">{{ currentScheduleTask?.self_drive ? '车辆分配' : '车辆分配（' + scheduleAssignments.length + '台）' }}</el-divider>
         
         <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
           <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
-          <el-select v-model="a.vehicle_id" placeholder="选择车辆" :style="{ flex: currentScheduleTask?.self_drive ? 1 : 1 }" filterable>
-            <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
+          <el-select v-model="a.vehicle_id" placeholder="选择车辆" style="flex:1" filterable @change="(val) => onScheduleVehicleChange(idx, val)">
+            <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '') + (v.mileage ? ' [' + v.mileage.toLocaleString() + 'km]' : '')" :value="v.id" />
           </el-select>
+          <span v-if="currentScheduleTask?.self_drive && a.vehicle_id" style="color:#909399;font-size:12px;min-width:80px">
+            里程: {{ getVehicleMileage(a.vehicle_id).toLocaleString() }}km
+          </span>
           <el-select v-if="!currentScheduleTask?.self_drive" v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
             <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id" />
           </el-select>
         </div>
+        
+        <el-form-item label="备注" style="margin-top:12px">
+          <el-input v-model="scheduleRemark" type="textarea" :rows="2" placeholder="选填" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="scheduleDialogVisible = false">取消</el-button>
@@ -957,6 +966,16 @@ const scheduleForm = ref({ vehicle_id: null, driver_id: null })
 const scheduleTaskId = ref(null)
 const scheduleAssignments = ref([])
 const currentScheduleTask = ref(null)
+const scheduleRemark = ref('')
+
+const getVehicleMileage = (vehicleId) => {
+  const v = vehicles.value.find(v => v.id === vehicleId)
+  return v?.mileage || 0
+}
+
+const onScheduleVehicleChange = (idx, val) => {
+  // 选择车辆时自动带出里程数（用于自驾车显示）
+}
 
 const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
 const completeTaskId = ref(null)
@@ -1056,6 +1075,7 @@ const showScheduleDialog = async (row) => {
   scheduleTaskId.value = row.id
   currentScheduleTask.value = row
   scheduleForm.value = { vehicle_id: null, driver_id: null }
+  scheduleRemark.value = row.remark || ''
   
   // 根据 vehicle_count 初始化分配列表
   const count = row.vehicle_count || 1
@@ -1107,7 +1127,10 @@ const submitSchedule = async () => {
     }
   }
   try {
-    await api.post(`/tasks/${scheduleTaskId.value}/schedule`, { assignments: scheduleAssignments.value })
+    await api.post(`/tasks/${scheduleTaskId.value}/schedule`, { 
+      assignments: scheduleAssignments.value,
+      remark: scheduleRemark.value
+    })
     ElMessage.success('排班成功')
     scheduleDialogVisible.value = false
     loadTasks()

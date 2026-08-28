@@ -1156,17 +1156,20 @@ def schedule_task(task_id):
     # 验证时间冲突
     task_start = task.departure_time
     task_end = task_start + timedelta(days=task.rental_days)
+    is_self_drive = task.self_drive or False
     
     for a in assignments:
         vid = a.get('vehicle_id')
         did = a.get('driver_id')
-        if not vid or not did:
-            return jsonify({'code': 400, 'msg': '请选择车辆和司机'})
+        if not vid:
+            return jsonify({'code': 400, 'msg': '请选择车辆'})
+        if not is_self_drive and not did:
+            return jsonify({'code': 400, 'msg': '请选择司机'})
         
         conflict_tasks = Task.query.filter(
             Task.id != task_id,
             Task.status.in_(['scheduled']),
-            (Task.vehicle_id == vid) | (Task.driver_id == did)
+            (Task.vehicle_id == vid) | (Task.driver_id == did) if did else (Task.vehicle_id == vid)
         ).all()
         
         for ct in conflict_tasks:
@@ -1174,7 +1177,7 @@ def schedule_task(task_id):
             ct_end = ct_start + timedelta(days=ct.rental_days)
             if task_start < ct_end and task_end > ct_start:
                 vehicle = Vehicle.query.get(vid)
-                driver = Driver.query.get(did)
+                driver = Driver.query.get(did) if did else None
                 return jsonify({'code': 400, 'msg': f'{vehicle.plate_number if vehicle else ""} 或 {driver.name if driver else ""} 在此时间段已被安排'})
     
     # 清除旧的车辆分配
@@ -1185,14 +1188,19 @@ def schedule_task(task_id):
         tv = TaskVehicle(
             task_id=task_id,
             vehicle_id=a['vehicle_id'],
-            driver_id=a['driver_id'],
+            driver_id=a.get('driver_id'),
             status='scheduled'
         )
         db.session.add(tv)
     
+    # 更新备注
+    remark = data.get('remark')
+    if remark is not None:
+        task.remark = remark
+    
     # 设置主车辆/司机为第一个分配
     task.vehicle_id = assignments[0]['vehicle_id']
-    task.driver_id = assignments[0]['driver_id']
+    task.driver_id = assignments[0].get('driver_id')
     task.status = 'scheduled'
     
     # 更新相关车辆状态
