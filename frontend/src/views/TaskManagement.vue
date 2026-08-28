@@ -503,10 +503,10 @@
         <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
           <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
           <el-select v-model="a.vehicle_id" placeholder="选择车辆" style="flex:1" filterable>
-            <el-option v-for="v in scheduleInfo.vehicles" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
+            <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
           </el-select>
           <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
-            <el-option v-for="d in scheduleInfo.drivers" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id" />
+            <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id" />
           </el-select>
         </div>
       </el-form>
@@ -1146,6 +1146,20 @@ const showScheduleDialog = async (row) => {
     scheduleInfo.value = { ...res.data, destination: row.destination, labor_fee: row.labor_fee }
     scheduleDialogVisible.value = true
   } catch (e) {}
+}
+
+const getAvailableVehicles = (currentIdx) => {
+  const selectedIds = scheduleAssignments.value
+    .map((a, idx) => idx !== currentIdx ? a.vehicle_id : null)
+    .filter(Boolean)
+  return scheduleInfo.value.vehicles.filter(v => !selectedIds.includes(v.id))
+}
+
+const getAvailableDrivers = (currentIdx) => {
+  const selectedIds = scheduleAssignments.value
+    .map((a, idx) => idx !== currentIdx ? a.driver_id : null)
+    .filter(Boolean)
+  return scheduleInfo.value.drivers.filter(d => !selectedIds.includes(d.id))
 }
 
 const submitSchedule = async () => {
