@@ -371,7 +371,7 @@
           </el-col>
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="用车数量">
-              <el-input-number v-model="taskForm.vehicle_count" :min="1" :max="50" style="width:100%" />
+              <el-input-number v-model="taskForm.vehicle_count" :min="1" :max="50" style="width:100%" @change="onVehicleCountChange" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -782,8 +782,9 @@
     </el-dialog>
 
     <!-- 费率设置弹窗 -->
-    <el-dialog v-model="settingsVisible" title="油电费费率配置" width="520px">
-      <div style="margin-bottom:12px">
+    <el-dialog v-model="settingsVisible" title="油电费费率配置" width="580px">
+      <el-divider content-position="left">核定载人数单价</el-divider>
+      <div style="margin-bottom:8px">
         <el-button type="primary" size="small" @click="addFuelRate">新增规则</el-button>
       </div>
       <el-table :data="fuelRates" border size="small">
@@ -804,6 +805,32 @@
         <el-table-column label="操作" width="70" align="center">
           <template #default="{ $index }">
             <el-button type="danger" size="small" link @click="fuelRates.splice($index, 1)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-divider content-position="left">里程预估加成比例</el-divider>
+      <div style="margin-bottom:8px">
+        <el-button type="primary" size="small" @click="addMileageMultiplier">新增区间</el-button>
+      </div>
+      <el-table :data="mileageMultipliers" border size="small">
+        <el-table-column label="里程区间(km)" min-width="160">
+          <template #default="{ row }">
+            <div style="display:flex;gap:4px;align-items:center">
+              <el-input-number v-model="row.min_km" :min="0" :max="99999" size="small" style="width:75px" controls-position="right" />
+              <span>~</span>
+              <el-input-number v-model="row.max_km" :min="0" :max="99999" size="small" style="width:75px" controls-position="right" />
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="加成(%)" width="110">
+          <template #default="{ row }">
+            <el-input-number v-model="row.multiplier" :min="0" :max="100" size="small" style="width:80px" controls-position="right" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="70" align="center">
+          <template #default="{ $index }">
+            <el-button type="danger" size="small" link @click="mileageMultipliers.splice($index, 1)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -832,6 +859,7 @@ const tasks = ref([])
 const statusFilter = ref('')
 const settingsVisible = ref(false)
 const fuelRates = ref([])
+const mileageMultipliers = ref([])
 
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
 
@@ -840,6 +868,12 @@ const defaultFuelRates = [
   { min: 15, max: 17, rate: 1.5 },
   { min: 7, max: 7, rate: 1 },
   { min: 5, max: 5, rate: 0.7 }
+]
+
+const defaultMileageMultipliers = [
+  { min_km: 0, max_km: 100, multiplier: 10 },
+  { min_km: 100, max_km: 500, multiplier: 5 },
+  { min_km: 500, max_km: 9999, multiplier: 3 }
 ]
 
 const loadFuelRates = async () => {
@@ -855,8 +889,25 @@ const loadFuelRates = async () => {
   }
 }
 
+const loadMileageMultipliers = async () => {
+  try {
+    const res = await api.get('/system-config/mileage_multipliers')
+    if (res.code === 200 && res.data) {
+      mileageMultipliers.value = JSON.parse(res.data)
+    } else {
+      mileageMultipliers.value = [...defaultMileageMultipliers]
+    }
+  } catch (e) {
+    mileageMultipliers.value = [...defaultMileageMultipliers]
+  }
+}
+
 const addFuelRate = () => {
   fuelRates.value.push({ min: 1, max: 1, rate: 1 })
+}
+
+const addMileageMultiplier = () => {
+  mileageMultipliers.value.push({ min_km: 0, max_km: 100, multiplier: 5 })
 }
 
 const showSettings = () => {
@@ -866,6 +917,7 @@ const showSettings = () => {
 const saveFuelRates = async () => {
   try {
     await api.put('/system-config/fuel_rates', { value: fuelRates.value })
+    await api.put('/system-config/mileage_multipliers', { value: mileageMultipliers.value })
     ElMessage.success('保存成功')
     settingsVisible.value = false
   } catch (e) {}
@@ -1257,6 +1309,16 @@ const onMileageChange = () => {
 }
 
 const tollLoading = ref(false)
+const singleDistance = ref(0)  // 单车单程距离
+const singleTolls = ref(0)    // 单车单程过路费
+
+const getMileageMultiplier = (distance) => {
+  const multipliers = mileageMultipliers.value.length > 0 ? mileageMultipliers.value : defaultMileageMultipliers
+  for (const m of multipliers) {
+    if (distance >= m.min_km && distance < m.max_km) return m.multiplier
+  }
+  return 10 // 默认10%
+}
 
 const onLocationChange = async () => {
   const dep = taskForm.value.departure?.trim()
@@ -1266,15 +1328,31 @@ const onLocationChange = async () => {
     tollLoading.value = true
     const res = await api.get('/estimate-toll', { params: { departure: dep, destination: dest } })
     if (res.code === 200 && res.data) {
-      taskForm.value.bridge_fee = res.data.tolls * 2
-      taskForm.value.mileage = Math.round(res.data.distance * 2 * 1.1 * 10) / 10
+      singleDistance.value = res.data.distance
+      singleTolls.value = res.data.tolls
+      const count = taskForm.value.vehicle_count || 1
+      const multiplier = getMileageMultiplier(singleDistance.value)
+      const mileage = Math.round(singleDistance.value * 2 * (1 + multiplier / 100) * 10) / 10
+      taskForm.value.mileage = Math.round(mileage * count * 10) / 10
+      taskForm.value.bridge_fee = singleTolls.value * 2 * count
       recalcFuelFee()
-      ElMessage.success(`预估：过路费${taskForm.value.bridge_fee}元，里程${taskForm.value.mileage}km（来回含10%余量）`)
+      ElMessage.success(`预估：过路费${taskForm.value.bridge_fee}元，里程${taskForm.value.mileage}km（来回含${multiplier}%余量${count > 1 ? '，' + count + '车' : ''}）`)
     }
   } catch (e) {
     // 静默失败，不打扰用户
   } finally {
     tollLoading.value = false
+  }
+}
+
+const onVehicleCountChange = () => {
+  if (singleDistance.value > 0) {
+    const count = taskForm.value.vehicle_count || 1
+    const multiplier = getMileageMultiplier(singleDistance.value)
+    const mileage = Math.round(singleDistance.value * 2 * (1 + multiplier / 100) * 10) / 10
+    taskForm.value.mileage = Math.round(mileage * count * 10) / 10
+    taskForm.value.bridge_fee = singleTolls.value * 2 * count
+    recalcFuelFee()
   }
 }
 
@@ -1444,7 +1522,7 @@ const showConfirmDetail = async (row) => {
 
 onMounted(async () => {
   await loadTasks()
-  loadLaborRates(); loadClients(); loadVehicles(); loadFuelRates()
+  loadLaborRates(); loadClients(); loadVehicles(); loadFuelRates(); loadMileageMultipliers()
   const editId = route.query.edit
   if (editId) {
     const task = tasks.value.find(t => t.id === Number(editId))
