@@ -478,8 +478,9 @@
     </el-dialog>
 
     <!-- Complete Task Dialog -->
-    <el-dialog v-model="completeDialogVisible" title="完成任务 - 录入实际费用" :width="isMobile ? '100%' : '500px'" :fullscreen="isMobile">
+    <el-dialog v-model="completeDialogVisible" :title="isSelfDriveComplete ? '完成任务 - 录入里程' : '完成任务 - 录入实际费用'" :width="isMobile ? '100%' : '500px'" :fullscreen="isMobile">
       <el-form :model="completeForm" :label-width="isMobile ? '100px' : '110px'">
+        <template v-if="!isSelfDriveComplete">
         <el-form-item label="油电费(预估)">
           <el-input :model-value="completeForm.actual_fuel_fee" disabled />
         </el-form-item>
@@ -489,13 +490,15 @@
         <el-form-item label="实际司机人工费">
           <el-input-number v-model="completeForm.actual_labor_fee" :min="0" :precision="2" style="width:100%" />
         </el-form-item>
+        </template>
         <el-form-item label="其他费用">
           <el-input-number v-model="completeForm.other_fee" :min="0" :precision="2" style="width:100%" />
         </el-form-item>
         <template v-if="showMileageFields">
           <el-divider>里程数</el-divider>
           <el-form-item label="起始里程(km)">
-            <el-input-number v-model="completeForm.start_mileage" :min="0" :precision="0" style="width:100%" />
+            <el-input v-if="isSelfDriveComplete" :model-value="completeForm.start_mileage?.toLocaleString()" disabled />
+            <el-input-number v-else v-model="completeForm.start_mileage" :min="0" :precision="0" style="width:100%" />
           </el-form-item>
           <el-form-item label="结束里程(km)">
             <el-input-number v-model="completeForm.end_mileage" :min="completeForm.start_mileage" :precision="0" style="width:100%" />
@@ -995,10 +998,13 @@ const onScheduleVehicleChange = (idx, val) => {
 
 const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
 const completeTaskId = ref(null)
+const currentCompleteTask = ref(null)
 
 const showMileageFields = computed(() => {
-  const task = tasks.value.find(t => t.id === completeTaskId.value)
+  const task = currentCompleteTask.value
   if (!task || !task.vehicle_id) return false
+  // 自驾车也显示里程（只读）
+  if (task.self_drive) return true
   // 核定载人数12座以下且不是国开司的车辆
   const capacity = parseInt(task.vehicle_type)
   if (isNaN(capacity) || capacity > 12) return false
@@ -1006,6 +1012,8 @@ const showMileageFields = computed(() => {
   if (vehicle && vehicle.company === '国开司') return false
   return true
 })
+
+const isSelfDriveComplete = computed(() => currentCompleteTask.value?.self_drive || false)
 
 const estimatedCost = computed(() => (taskForm.value.fuel_fee + taskForm.value.bridge_fee + taskForm.value.labor_fee).toFixed(2))
 const estimatedProfit = computed(() => (taskForm.value.rental_fee - taskForm.value.fuel_fee - taskForm.value.bridge_fee - taskForm.value.labor_fee).toFixed(2))
@@ -1155,16 +1163,21 @@ const submitSchedule = async () => {
 
 const showCompleteDialog = (row) => {
   completeTaskId.value = row.id
+  currentCompleteTask.value = row
   
   // 计算起始里程数（从车辆当前里程获取）
   let startMileage = 0
   if (row.vehicle_id) {
     const vehicle = vehicles.value.find(v => v.id === row.vehicle_id)
     if (vehicle) {
-      const capacity = parseInt(row.vehicle_type)
-      // 核定载人数12座以下且不是国开司的车辆
-      if (!isNaN(capacity) && capacity <= 12 && vehicle.company !== '国开司') {
+      // 自驾车或核定载人数12座以下且不是国开司的车辆
+      if (row.self_drive) {
         startMileage = vehicle.mileage || 0
+      } else {
+        const capacity = parseInt(row.vehicle_type)
+        if (!isNaN(capacity) && capacity <= 12 && vehicle.company !== '国开司') {
+          startMileage = vehicle.mileage || 0
+        }
       }
     }
   }
