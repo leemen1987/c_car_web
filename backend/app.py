@@ -454,6 +454,8 @@ def update_vehicle(vehicle_id):
         vehicle.company = data['company']
     if 'status' in data:
         vehicle.status = data['status']
+    if 'mileage' in data:
+        vehicle.mileage = data['mileage']
     for field in ['registration_date', 'issue_date', 'usage_type', 'brand_model', 'inspection_expiry', 'scrap_date', 'insurance_expiry']:
         if field in data:
             if field in ('registration_date', 'issue_date', 'inspection_expiry', 'insurance_expiry'):
