@@ -135,6 +135,11 @@
               <el-date-picker v-model="form.insurance_expiry" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
             </el-form-item>
           </el-col>
+          <el-col :span="12">
+            <el-form-item label="当前里程(km)">
+              <el-input-number v-model="form.mileage" :min="0" :precision="0" style="width:100%" />
+            </el-form-item>
+          </el-col>
         </el-row>
       </el-form>
       <template #footer>
@@ -200,7 +205,7 @@ const companies = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
-const form = ref({ plate_number: '', capacity: '', vehicle_type: '', company: '', status: 'available', registration_date: '', issue_date: '', usage_type: '', brand_model: '', inspection_expiry: '', scrap_date: '', insurance_expiry: '' })
+const form = ref({ plate_number: '', capacity: '', vehicle_type: '', company: '', status: 'available', registration_date: '', issue_date: '', usage_type: '', brand_model: '', inspection_expiry: '', scrap_date: '', insurance_expiry: '', mileage: 0 })
 
 const companyDialogVisible = ref(false)
 const companyFormVisible = ref(false)
@@ -216,7 +221,7 @@ const loadCompanies = async () => {
   try { const res = await api.get('/vehicle-companies'); companies.value = res.data } catch (e) {}
 }
 
-const defaultForm = { plate_number: '', capacity: '', vehicle_type: '', company: '', status: 'available', registration_date: '', issue_date: '', usage_type: '', brand_model: '', inspection_expiry: '', scrap_date: '', insurance_expiry: '' }
+const defaultForm = { plate_number: '', capacity: '', vehicle_type: '', company: '', status: 'available', registration_date: '', issue_date: '', usage_type: '', brand_model: '', inspection_expiry: '', scrap_date: '', insurance_expiry: '', mileage: 0 }
 
 const showAdd = () => { isEdit.value = false; form.value = { ...defaultForm }; dialogVisible.value = true }
 const showEdit = (row) => {
@@ -234,7 +239,8 @@ const showEdit = (row) => {
     brand_model: row.brand_model || '',
     inspection_expiry: row.inspection_expiry || '',
     scrap_date: row.scrap_date || '',
-    insurance_expiry: row.insurance_expiry || ''
+    insurance_expiry: row.insurance_expiry || '',
+    mileage: row.mileage || 0
   }
   dialogVisible.value = true
 }
