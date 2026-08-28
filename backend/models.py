@@ -91,6 +91,7 @@ class Vehicle(db.Model):
     inspection_expiry = db.Column(db.Date, nullable=True)  # 检验有效期
     scrap_date = db.Column(db.String(20), default='')  # 强制报废期
     insurance_expiry = db.Column(db.Date, nullable=True)  # 保险到期日期
+    mileage = db.Column(db.Float, default=0)  # 当前里程数
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     def to_dict(self):
@@ -108,6 +109,7 @@ class Vehicle(db.Model):
             'inspection_expiry': self.inspection_expiry.strftime('%Y-%m-%d') if self.inspection_expiry else '',
             'scrap_date': self.scrap_date or '',
             'insurance_expiry': self.insurance_expiry.strftime('%Y-%m-%d') if self.insurance_expiry else '',
+            'mileage': self.mileage or 0,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
         }
 
@@ -212,6 +214,9 @@ class Task(db.Model):
     invoice_amount = db.Column(db.Float, default=0)  # 发票金额
     invoice_date = db.Column(db.DateTime, nullable=True)  # 开票日期
     invoice_remark = db.Column(db.Text, default='')  # 发票备注
+    contract_no = db.Column(db.String(50), default='')  # 包车合同编号
+    start_mileage = db.Column(db.Float, default=0)  # 起始里程数
+    end_mileage = db.Column(db.Float, default=0)  # 结束里程数
     status = db.Column(db.String(20), default='pending')  # pending, scheduled, completed, cancelled
     yzj_approval_status = db.Column(db.String(20), default='')  # 审批状态：空=未发起, submitted=已发起, approved=已通过, rejected=已拒绝
     yzj_flow_inst_id = db.Column(db.String(50), default='')  # 云之家流程实例ID
@@ -294,6 +299,9 @@ class Task(db.Model):
             'invoice_amount': self.invoice_amount,
             'invoice_date': self.invoice_date.strftime('%Y-%m-%d') if self.invoice_date else None,
             'invoice_remark': self.invoice_remark or '',
+            'contract_no': self.contract_no or '',
+            'start_mileage': self.start_mileage or 0,
+            'end_mileage': self.end_mileage or 0,
             'status': self.status,
             'yzj_approval_status': getattr(self, 'yzj_approval_status', ''),
             'yzj_serial': getattr(self, 'yzj_serial', ''),

@@ -31,6 +31,9 @@
         <el-table-column prop="registration_date" label="注册日期" min-width="110" />
         <el-table-column prop="inspection_expiry" label="检验有效期" min-width="110" />
         <el-table-column prop="insurance_expiry" label="保险到期" min-width="110" />
+        <el-table-column prop="mileage" label="当前里程" min-width="100" align="right">
+          <template #default="{ row }">{{ row.mileage ? row.mileage.toLocaleString() + ' km' : '-' }}</template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="row.status === 'available' ? 'success' : row.status === 'busy' ? 'warning' : 'info'">

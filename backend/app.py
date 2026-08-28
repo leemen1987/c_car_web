@@ -1192,6 +1192,19 @@ def complete_task(task_id):
     paid_date = data.get('paid_date')
     task.paid_date = datetime.strptime(paid_date, '%Y-%m-%d') if paid_date else None
     task.paid_method = data.get('paid_method', '')
+    
+    # 处理里程数
+    start_mileage = data.get('start_mileage', 0)
+    end_mileage = data.get('end_mileage', 0)
+    task.start_mileage = start_mileage
+    task.end_mileage = end_mileage
+    
+    # 更新车辆里程数
+    if task.vehicle_id and end_mileage > 0:
+        vehicle = Vehicle.query.get(task.vehicle_id)
+        if vehicle:
+            vehicle.mileage = end_mileage
+    
     task.status = 'completed'
 
     db.session.commit()
@@ -1246,6 +1259,7 @@ def save_invoice(task_id):
     invoice_date = data.get('invoice_date')
     task.invoice_date = datetime.strptime(invoice_date, '%Y-%m-%d') if invoice_date else None
     task.invoice_remark = data.get('invoice_remark', '')
+    task.contract_no = data.get('contract_no', '')
 
     db.session.commit()
     return jsonify({'code': 200, 'msg': '发票信息已保存', 'data': task.to_dict()})
@@ -2404,6 +2418,9 @@ def init_db():
         ('invoice_amount', "FLOAT DEFAULT 0"),
         ('invoice_date', "DATETIME NULL"),
         ('invoice_remark', "TEXT"),
+        ('contract_no', "VARCHAR(50) DEFAULT ''"),
+        ('start_mileage', "FLOAT DEFAULT 0"),
+        ('end_mileage', "FLOAT DEFAULT 0"),
     ]:
         try:
             db.session.execute(db.text(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}"))
@@ -2437,6 +2454,7 @@ def init_db():
         ("inspection_expiry", "VARCHAR(20) DEFAULT ''"),
         ("scrap_date", "VARCHAR(20) DEFAULT ''"),
         ("insurance_expiry", "VARCHAR(20) DEFAULT ''"),
+        ("mileage", "FLOAT DEFAULT 0"),
     ]
     for col_name, col_type in vehicle_cols:
         try:

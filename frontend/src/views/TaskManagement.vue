@@ -36,7 +36,8 @@
         </el-table-column>
         <el-table-column label="用车方" min-width="120">
           <template #default="{ row }">
-            <span v-if="row.client_type === 'company'" style="font-weight:600">{{ row.client_company }}</span>
+            <el-tag v-if="row.client_type === 'selfdrive'" type="info" size="small">自驾车</el-tag>
+            <span v-else-if="row.client_type === 'company'" style="font-weight:600">{{ row.client_company }}</span>
             <span v-else>{{ row.client_name }}</span>
           </template>
         </el-table-column>
@@ -46,7 +47,7 @@
               <div>{{ row.client_name }}</div>
               <div style="color:#909399;font-size:12px">{{ row.client_phone }}</div>
             </div>
-            <span v-else>{{ row.client_phone }}</span>
+            <span v-else>{{ row.client_name }} {{ row.client_phone }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="departure" label="出发地点" min-width="100" />
@@ -98,6 +99,18 @@
             <el-tag v-else-if="row.yzj_approval_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
             <span v-else style="color:#c0c4cc">-</span>
             <div v-if="row.yzj_serial" style="font-size:11px;color:#909399;margin-top:2px">{{ row.yzj_serial }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="起始里程" width="90" align="right">
+          <template #default="{ row }">
+            <span v-if="row.start_mileage">{{ row.start_mileage.toLocaleString() }}</span>
+            <span v-else style="color:#c0c4cc">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="结束里程" width="90" align="right">
+          <template #default="{ row }">
+            <span v-if="row.end_mileage">{{ row.end_mileage.toLocaleString() }}</span>
+            <span v-else style="color:#c0c4cc">-</span>
           </template>
         </el-table-column>
         <el-table-column label="客户确认" width="120" align="center">
@@ -248,6 +261,7 @@
               <el-radio-group v-model="taskForm.client_type" @change="onClientTypeChange">
                 <el-radio value="personal">个人</el-radio>
                 <el-radio value="company">单位</el-radio>
+                <el-radio value="selfdrive">自驾车</el-radio>
               </el-radio-group>
             </el-form-item>
           </el-col>
@@ -264,10 +278,10 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row v-else :gutter="isMobile ? 0 : 20">
+        <el-row v-else-if="taskForm.client_type === 'company'" :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="用车单位">
-              <el-select v-model="taskForm.client_id" placeholder="请选择单位" style="width:100%" @change="onClientChange">
+              <el-select v-model="taskForm.client_id" placeholder="请选择单位" style="width:100%" filterable @change="onClientChange">
                 <el-option v-for="c in clients" :key="c.id" :label="c.name" :value="c.id" />
               </el-select>
             </el-form-item>
@@ -280,12 +294,84 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <template v-if="taskForm.client_type === 'selfdrive'">
+          <el-row :gutter="isMobile ? 0 : 20">
+            <el-col :span="isMobile ? 24 : 12">
+              <el-form-item label="姓名">
+                <el-input v-model="taskForm.client_name" placeholder="请输入姓名" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="isMobile ? 24 : 12">
+              <el-form-item label="手机号码">
+                <el-input v-model="taskForm.client_phone" placeholder="请输入手机号码" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="isMobile ? 0 : 20">
+            <el-col :span="isMobile ? 24 : 12">
+              <el-form-item label="核定载人数">
+                <el-select v-model="taskForm.vehicle_type" placeholder="请选择核定载人数" style="width:100%" filterable allow-create @change="onCapacityChange">
+                  <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="isMobile ? 0 : 20">
+            <el-col :span="isMobile ? 24 : 12">
+              <el-form-item label="出车时间">
+                <el-date-picker v-model="taskForm.departure_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" :disabled-date="disablePastDates" @change="onDepartureTimeChange" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="isMobile ? 24 : 12">
+              <el-form-item label="回程时间">
+                <el-date-picker v-model="taskForm.return_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" :disabled-date="disableBeforeDeparture" @change="onTimeChange" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="isMobile ? 0 : 20">
+            <el-col :span="isMobile ? 24 : 12">
+              <el-form-item label="租用天数">
+                <el-input :model-value="computedRentalDays" disabled />
+              </el-form-item>
+            </el-col>
+            <el-col :span="isMobile ? 24 : 12">
+              <el-form-item label="租车费(元)">
+                <el-input-number v-model="taskForm.rental_fee" :min="0" :precision="2" style="width:100%" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="isMobile ? 0 : 20">
+            <el-col :span="isMobile ? 24 : 12">
+              <el-form-item label="预计成本">
+                <el-input :model-value="estimatedCost" disabled />
+              </el-form-item>
+            </el-col>
+            <el-col :span="isMobile ? 24 : 12">
+              <el-form-item label="预估利润">
+                <el-input :model-value="estimatedProfit" disabled />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="isMobile ? 0 : 20">
+            <el-col :span="24">
+              <el-form-item label="备注">
+                <el-input v-model="taskForm.remark" type="textarea" :rows="2" placeholder="选填" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
+        <template v-else>
         <el-row :gutter="isMobile ? 0 : 20">
-          <el-col :span="isMobile ? 24 : 12">
+          <el-col :span="isMobile ? 24 : 8">
             <el-form-item label="核定载人数">
               <el-select v-model="taskForm.vehicle_type" placeholder="请选择核定载人数" style="width:100%" filterable allow-create @change="onCapacityChange">
                 <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
               </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="isMobile ? 24 : 8">
+            <el-form-item label="用车数量">
+              <el-input-number v-model="taskForm.vehicle_count" :min="1" :max="50" style="width:100%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -377,6 +463,7 @@
             </el-form-item>
           </el-col>
         </el-row>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="taskDialogVisible = false">取消</el-button>
@@ -429,6 +516,15 @@
         <el-form-item label="其他费用">
           <el-input-number v-model="completeForm.other_fee" :min="0" :precision="2" style="width:100%" />
         </el-form-item>
+        <template v-if="showMileageFields">
+          <el-divider>里程数</el-divider>
+          <el-form-item label="起始里程(km)">
+            <el-input-number v-model="completeForm.start_mileage" :min="0" :precision="0" style="width:100%" />
+          </el-form-item>
+          <el-form-item label="结束里程(km)">
+            <el-input-number v-model="completeForm.end_mileage" :min="completeForm.start_mileage" :precision="0" style="width:100%" />
+          </el-form-item>
+        </template>
         <el-divider />
         <el-form-item label="实际成本">
           <el-input :model-value="actualCostDisplay" disabled />
@@ -565,6 +661,9 @@
         </el-form-item>
         <el-form-item label="发票号码">
           <el-input v-model="invoiceForm.invoice_no" placeholder="请输入发票号码" />
+        </el-form-item>
+        <el-form-item label="包车合同编号">
+          <el-input v-model="invoiceForm.contract_no" placeholder="请输入包车合同编号" />
         </el-form-item>
         <el-form-item label="发票金额">
           <el-input-number v-model="invoiceForm.invoice_amount" :min="0" :precision="2" style="width:100%" />
@@ -793,7 +892,7 @@ const cancelTaskId = ref(null)
 const cancelReason = ref('')
 const invoiceDialogVisible = ref(false)
 const invoiceTaskId = ref(null)
-const invoiceForm = ref({ invoice_type: '', invoice_no: '', invoice_amount: 0, invoice_date: '', invoice_remark: '' })
+const invoiceForm = ref({ invoice_type: '', invoice_no: '', invoice_amount: 0, invoice_date: '', invoice_remark: '', contract_no: '' })
 
 // 云之家审批相关
 const approvalDialogVisible = ref(false)
@@ -829,7 +928,7 @@ const canSubmitApproval = (row) => {
 const taskForm = ref({
   client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null,
   departure: '', destination: '', departure_time: '', return_time: '',
-  vehicle_type: '', mileage: 0, rental_fee: 0,
+  vehicle_type: '', vehicle_count: 1, mileage: 0, rental_fee: 0,
   fuel_fee: 0, bridge_fee: 0, labor_fee: 0, remark: ''
 })
 
@@ -854,8 +953,19 @@ const scheduleInfo = ref({ vehicles: [], drivers: [], labor_rate: 0, task_start:
 const scheduleForm = ref({ vehicle_id: null, driver_id: null })
 const scheduleTaskId = ref(null)
 
-const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '' })
+const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
 const completeTaskId = ref(null)
+
+const showMileageFields = computed(() => {
+  const task = tasks.value.find(t => t.id === completeTaskId.value)
+  if (!task || !task.vehicle_id) return false
+  // 核定载人数12座以下且不是国开司的车辆
+  const capacity = parseInt(task.vehicle_type)
+  if (isNaN(capacity) || capacity > 12) return false
+  const vehicle = vehicles.value.find(v => v.id === task.vehicle_id)
+  if (vehicle && vehicle.company === '国开司') return false
+  return true
+})
 
 const estimatedCost = computed(() => (taskForm.value.fuel_fee + taskForm.value.bridge_fee + taskForm.value.labor_fee).toFixed(2))
 const estimatedProfit = computed(() => (taskForm.value.rental_fee - taskForm.value.fuel_fee - taskForm.value.bridge_fee - taskForm.value.labor_fee).toFixed(2))
@@ -879,7 +989,7 @@ const loadTasks = async () => {
 const showAddDialog = () => {
   isEdit.value = false
   editId.value = null
-  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
+  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
   taskDialogVisible.value = true
 }
 
@@ -908,8 +1018,18 @@ const submitTask = async () => {
     ElMessage.warning('请选择用车单位和联系人')
     return
   }
-  if (!taskForm.value.departure || !taskForm.value.destination || !taskForm.value.departure_time || !taskForm.value.return_time) {
-    ElMessage.warning('请填写必填信息')
+  if (taskForm.value.client_type === 'selfdrive' && (!taskForm.value.client_name || !taskForm.value.client_phone)) {
+    ElMessage.warning('请填写姓名和手机号码')
+    return
+  }
+  if (taskForm.value.client_type !== 'selfdrive') {
+    if (!taskForm.value.departure || !taskForm.value.destination) {
+      ElMessage.warning('请填写出发地和目的地')
+      return
+    }
+  }
+  if (!taskForm.value.departure_time || !taskForm.value.return_time) {
+    ElMessage.warning('请填写出车和回程时间')
     return
   }
   if (new Date(taskForm.value.departure_time) < new Date()) {
@@ -925,8 +1045,11 @@ const submitTask = async () => {
       await api.put(`/tasks/${editId.value}`, taskForm.value)
       ElMessage.success('更新成功')
     } else {
-      await api.post('/tasks', taskForm.value)
-      ElMessage.success('录入成功')
+      const count = taskForm.value.vehicle_count || 1
+      for (let i = 0; i < count; i++) {
+        await api.post('/tasks', taskForm.value)
+      }
+      ElMessage.success(count > 1 ? `已录入${count}条任务` : '录入成功')
     }
     taskDialogVisible.value = false
     loadTasks()
@@ -958,6 +1081,20 @@ const submitSchedule = async () => {
 
 const showCompleteDialog = (row) => {
   completeTaskId.value = row.id
+  
+  // 计算起始里程数（从车辆当前里程获取）
+  let startMileage = 0
+  if (row.vehicle_id) {
+    const vehicle = vehicles.value.find(v => v.id === row.vehicle_id)
+    if (vehicle) {
+      const capacity = parseInt(row.vehicle_type)
+      // 核定载人数12座以下且不是国开司的车辆
+      if (!isNaN(capacity) && capacity <= 12 && vehicle.company !== '国开司') {
+        startMileage = vehicle.mileage || 0
+      }
+    }
+  }
+  
   completeForm.value = {
     actual_fuel_fee: row.fuel_fee || 0,
     actual_bridge_fee: row.bridge_fee || 0,
@@ -966,7 +1103,9 @@ const showCompleteDialog = (row) => {
     remark: '',
     is_paid: false,
     paid_date: '',
-    paid_method: ''
+    paid_method: '',
+    start_mileage: startMileage,
+    end_mileage: 0
   }
   completeDialogVisible.value = true
 }
@@ -1027,7 +1166,8 @@ const showInvoiceDialog = (row) => {
     invoice_no: row.invoice_no || '',
     invoice_amount: row.invoice_amount || 0,
     invoice_date: row.invoice_date || '',
-    invoice_remark: row.invoice_remark || ''
+    invoice_remark: row.invoice_remark || '',
+    contract_no: row.contract_no || ''
   }
   invoiceDialogVisible.value = true
 }

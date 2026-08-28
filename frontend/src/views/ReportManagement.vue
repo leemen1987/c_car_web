@@ -7,9 +7,14 @@
             <el-icon :size="20"><DataAnalysis /></el-icon>
             <span>报表管理</span>
           </div>
-          <el-button text size="small" @click="showSearch = !showSearch">
-            {{ showSearch ? '收起筛选' : '展开筛选' }} <el-icon><ArrowUp v-if="showSearch" /><ArrowDown v-else /></el-icon>
-          </el-button>
+          <div style="display:flex;gap:8px">
+            <el-button text size="small" @click="showColumnSettings = true">
+              <el-icon><Setting /></el-icon> 列设置
+            </el-button>
+            <el-button text size="small" @click="showSearch = !showSearch">
+              {{ showSearch ? '收起筛选' : '展开筛选' }} <el-icon><ArrowUp v-if="showSearch" /><ArrowDown v-else /></el-icon>
+            </el-button>
+          </div>
         </div>
       </template>
 
@@ -90,7 +95,7 @@
                 <span :style="{ color: row.final_profit >= 0 ? '#67c23a' : '#f56c6c' }">{{ row.final_profit }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="status" label="状态" width="90" align="center">
+            <el-table-column v-if="isColumnVisible('status')" prop="status" label="状态" width="90" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.status === 'completed' ? 'success' : row.status === 'scheduled' ? 'primary' : row.status === 'cancelled' ? 'danger' : 'warning'">
                   {{ row.status === 'completed' ? '已完成' : row.status === 'scheduled' ? '已排班' : row.status === 'cancelled' ? '已取消' : '待排班' }}
@@ -107,7 +112,7 @@
                 <span v-else style="color:#c0c4cc">-</span>
               </template>
             </el-table-column>
-            <el-table-column label="确认情况" width="90" align="center">
+            <el-table-column v-if="isColumnVisible('confirm')" label="确认情况" width="90" align="center">
               <template #default="{ row }">
                 <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
                 <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
@@ -202,7 +207,7 @@
                   <span v-else style="color:#c0c4cc">-</span>
                 </template>
               </el-table-column>
-              <el-table-column label="确认情况" width="90" align="center">
+              <el-table-column v-if="isColumnVisible('confirm')" label="确认情况" width="90" align="center">
                 <template #default="{ row }">
                   <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
                   <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
@@ -305,7 +310,7 @@
                   <span v-else style="color:#c0c4cc">-</span>
                 </template>
               </el-table-column>
-              <el-table-column label="确认情况" width="90" align="center">
+              <el-table-column v-if="isColumnVisible('confirm')" label="确认情况" width="90" align="center">
                 <template #default="{ row }">
                   <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
                   <el-tag v-else-if="row.schedule_confirm_status === 'rejected'" type="danger" size="small">已拒绝</el-tag>
@@ -323,6 +328,19 @@
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <!-- 列设置弹窗 -->
+    <el-dialog v-model="showColumnSettings" title="显示列设置" width="400px">
+      <el-checkbox-group v-model="visibleColumns">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <el-checkbox v-for="col in allColumns" :key="col.key" :label="col.key">{{ col.label }}</el-checkbox>
+        </div>
+      </el-checkbox-group>
+      <template #footer>
+        <el-button @click="resetColumns">恢复默认</el-button>
+        <el-button type="primary" @click="showColumnSettings = false">确定</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 编辑任务弹窗 -->
     <el-dialog v-model="editDialogVisible" title="编辑任务费用" width="500px">
@@ -381,6 +399,24 @@ const activeTab = ref('client')
 const showSearch = ref(true)
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
 const canEdit = () => user.value.role === 'admin' || (user.value.permissions || []).includes('report_edit')
+
+// 列设置
+const showColumnSettings = ref(false)
+const allColumns = [
+  { key: 'status', label: '状态' },
+  { key: 'approval', label: '审批' },
+  { key: 'confirm', label: '客户确认' },
+  { key: 'start_mileage', label: '起始里程' },
+  { key: 'end_mileage', label: '结束里程' },
+]
+const defaultVisibleColumns = ['status']
+const visibleColumns = ref([...defaultVisibleColumns])
+
+const resetColumns = () => {
+  visibleColumns.value = [...defaultVisibleColumns]
+}
+
+const isColumnVisible = (key) => visibleColumns.value.includes(key)
 
 const editDialogVisible = ref(false)
 const editForm = ref({ id: null, rental_fee: 0, actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, is_paid: false, paid_date: '', paid_method: '', remark: '' })
