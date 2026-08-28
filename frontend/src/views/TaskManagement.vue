@@ -34,11 +34,13 @@
             <el-tag v-else-if="row.status === 'cancelled'" type="danger">已取消</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="用车方" min-width="120">
+        <el-table-column label="用车方" min-width="120" align="center">
           <template #default="{ row }">
-            <span v-if="row.client_type === 'company'" style="font-weight:600">{{ row.client_company }}</span>
-            <span v-else>{{ row.client_name }}</span>
-            <el-tag v-if="row.self_drive" type="info" size="small" style="margin-left:4px">自驾车</el-tag>
+            <div style="display:flex;align-items:center;justify-content:center;gap:4px">
+              <span v-if="row.client_type === 'company'" style="font-weight:600">{{ row.client_company }}</span>
+              <span v-else>{{ row.client_name }}</span>
+              <el-tag v-if="row.self_drive" type="info" size="small">自驾车</el-tag>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="联系人" min-width="120">
