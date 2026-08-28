@@ -351,16 +351,17 @@
               <el-input :model-value="computedRentalDays" disabled />
             </el-form-item>
           </el-col>
+          <el-col :span="isMobile ? 24 : 12">
+            <el-form-item label="租车费(元)">
+              <el-input-number v-model="taskForm.rental_fee" :min="0" :precision="2" style="width:100%" />
+            </el-form-item>
+          </el-col>
         </el-row>
+        <template v-if="!taskForm.self_drive">
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="任务里程(km)">
               <el-input-number v-model="taskForm.mileage" :min="0" :precision="1" style="width:100%" @change="onMileageChange" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="isMobile ? 24 : 12">
-            <el-form-item label="租车费(元)">
-              <el-input-number v-model="taskForm.rental_fee" :min="0" :precision="2" style="width:100%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -390,6 +391,7 @@
             </el-form-item>
           </el-col>
         </el-row>
+        </template>
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="预计成本">
