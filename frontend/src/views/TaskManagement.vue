@@ -438,22 +438,38 @@
         
         <el-divider content-position="left">{{ currentScheduleTask?.self_drive ? '车辆分配' : '车辆分配（' + scheduleAssignments.length + '台）' }}</el-divider>
         
+        <template v-if="currentScheduleTask?.self_drive">
+        <!-- 自驾车排班布局 -->
+        <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="margin-bottom:16px;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+          <el-form-item label="选择车辆" style="margin-bottom:8px">
+            <el-select v-model="a.vehicle_id" placeholder="请选择车辆" style="width:100%" filterable @change="(val) => onScheduleVehicleChange(idx, val)">
+              <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="a.vehicle_id" label="当前里程" style="margin-bottom:0">
+            <span style="font-weight:600;color:#409eff">{{ getVehicleMileage(a.vehicle_id).toLocaleString() }} km</span>
+          </el-form-item>
+        </div>
+        <el-form-item label="备注">
+          <el-input v-model="scheduleRemark" type="textarea" :rows="2" placeholder="选填" />
+        </el-form-item>
+        </template>
+        
+        <template v-else>
+        <!-- 普通排班布局 -->
         <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
           <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
-          <el-select v-model="a.vehicle_id" placeholder="选择车辆" style="flex:1" filterable @change="(val) => onScheduleVehicleChange(idx, val)">
-            <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '') + (v.mileage ? ' [' + v.mileage.toLocaleString() + 'km]' : '')" :value="v.id" />
+          <el-select v-model="a.vehicle_id" placeholder="选择车辆" style="flex:1" filterable>
+            <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
           </el-select>
-          <span v-if="currentScheduleTask?.self_drive && a.vehicle_id" style="color:#909399;font-size:12px;min-width:80px">
-            里程: {{ getVehicleMileage(a.vehicle_id).toLocaleString() }}km
-          </span>
-          <el-select v-if="!currentScheduleTask?.self_drive" v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
+          <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
             <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id" />
           </el-select>
         </div>
-        
         <el-form-item label="备注" style="margin-top:12px">
           <el-input v-model="scheduleRemark" type="textarea" :rows="2" placeholder="选填" />
         </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="scheduleDialogVisible = false">取消</el-button>
