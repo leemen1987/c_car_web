@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, session, redirect
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
-from models import db, User, Driver, Vehicle, VehicleCompany, Task, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot, LongRentalContract, LongRentalBill, SystemConfig
+from models import db, User, Driver, Vehicle, VehicleCompany, Task, TaskVehicle, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot, LongRentalContract, LongRentalBill, SystemConfig
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, date
 from functools import wraps
@@ -906,6 +906,7 @@ def create_task():
         return_time=return_time,
         rental_days=rental_days,
         vehicle_type=data.get('vehicle_type', ''),
+        vehicle_count=data.get('vehicle_count', 1),
         mileage=data.get('mileage', 0),
         rental_fee=data.get('rental_fee', 0),
         fuel_fee=data.get('fuel_fee', 0),
@@ -920,6 +921,13 @@ def create_task():
     db.session.flush()
     # 自动生成任务编号：TASK-YYYYMMDD-ID
     task.task_no = f'TASK-{task.created_at.strftime("%Y%m%d")}-{task.id}'
+    
+    # 创建车辆分配记录
+    for _ in range(task.vehicle_count):
+        tv = TaskVehicle(task_id=task.id, status='pending')
+        db.session.add(tv)
+    
+    db.session.commit()
     db.session.commit()
     return jsonify({'code': 200, 'msg': '任务创建成功', 'data': task.to_dict()})
 
@@ -1126,45 +1134,71 @@ def get_available_resources(task_id):
 @app.route('/api/tasks/<int:task_id>/schedule', methods=['POST'])
 @login_required
 def schedule_task(task_id):
-    """Assign vehicle and driver to a task."""
+    """Assign vehicles and drivers to a task."""
     task = Task.query.get(task_id)
     if not task:
         return jsonify({'code': 404, 'msg': '任务不存在'})
     data = request.get_json()
-    vehicle_id = data.get('vehicle_id')
-    driver_id = data.get('driver_id')
-
-    if not vehicle_id or not driver_id:
+    
+    # 支持单个和多个排班
+    assignments = data.get('assignments', [])
+    if not assignments:
+        # 兼容旧的单个排班
+        vehicle_id = data.get('vehicle_id')
+        driver_id = data.get('driver_id')
+        if vehicle_id and driver_id:
+            assignments = [{'vehicle_id': vehicle_id, 'driver_id': driver_id}]
+    
+    if not assignments:
         return jsonify({'code': 400, 'msg': '请选择车辆和司机'})
 
-    # Verify availability
+    # 验证时间冲突
     task_start = task.departure_time
     task_end = task_start + timedelta(days=task.rental_days)
-
-    conflict_tasks = Task.query.filter(
-        Task.id != task_id,
-        Task.status.in_(['scheduled']),
-        (Task.vehicle_id == vehicle_id) | (Task.driver_id == driver_id)
-    ).all()
-
-    conflict = None
-    for ct in conflict_tasks:
-        ct_start = ct.departure_time
-        ct_end = ct_start + timedelta(days=ct.rental_days)
-        if task_start < ct_end and task_end > ct_start:
-            conflict = ct
-            break
-
-    if conflict:
-        return jsonify({'code': 400, 'msg': '该车辆或司机在此时间段已被安排'})
-
-    task.vehicle_id = vehicle_id
-    task.driver_id = driver_id
+    
+    for a in assignments:
+        vid = a.get('vehicle_id')
+        did = a.get('driver_id')
+        if not vid or not did:
+            return jsonify({'code': 400, 'msg': '请选择车辆和司机'})
+        
+        conflict_tasks = Task.query.filter(
+            Task.id != task_id,
+            Task.status.in_(['scheduled']),
+            (Task.vehicle_id == vid) | (Task.driver_id == did)
+        ).all()
+        
+        for ct in conflict_tasks:
+            ct_start = ct.departure_time
+            ct_end = ct_start + timedelta(days=ct.rental_days)
+            if task_start < ct_end and task_end > ct_start:
+                vehicle = Vehicle.query.get(vid)
+                driver = Driver.query.get(did)
+                return jsonify({'code': 400, 'msg': f'{vehicle.plate_number if vehicle else ""} 或 {driver.name if driver else ""} 在此时间段已被安排'})
+    
+    # 清除旧的车辆分配
+    TaskVehicle.query.filter_by(task_id=task_id).delete()
+    
+    # 创建新的车辆分配
+    for a in assignments:
+        tv = TaskVehicle(
+            task_id=task_id,
+            vehicle_id=a['vehicle_id'],
+            driver_id=a['driver_id'],
+            status='scheduled'
+        )
+        db.session.add(tv)
+    
+    # 设置主车辆/司机为第一个分配
+    task.vehicle_id = assignments[0]['vehicle_id']
+    task.driver_id = assignments[0]['driver_id']
     task.status = 'scheduled'
-
-    # Recalculate estimated cost and profit
-    task.estimated_cost = task.fuel_fee + task.bridge_fee + task.labor_fee
-    task.estimated_profit = task.rental_fee - task.estimated_cost
+    
+    # 更新相关车辆状态
+    for a in assignments:
+        vehicle = Vehicle.query.get(a['vehicle_id'])
+        if vehicle:
+            vehicle.status = 'busy'
 
     db.session.commit()
     return jsonify({'code': 200, 'msg': '排班成功', 'data': task.to_dict()})
@@ -2421,6 +2455,7 @@ def init_db():
         ('contract_no', "VARCHAR(50) DEFAULT ''"),
         ('start_mileage', "FLOAT DEFAULT 0"),
         ('end_mileage', "FLOAT DEFAULT 0"),
+        ('vehicle_count', "INT DEFAULT 1"),
     ]:
         try:
             db.session.execute(db.text(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}"))

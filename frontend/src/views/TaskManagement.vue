@@ -52,15 +52,26 @@
         </el-table-column>
         <el-table-column prop="departure" label="出发地点" min-width="100" />
         <el-table-column prop="destination" label="目的地" min-width="100" />
-        <el-table-column label="车牌号" min-width="100" align="center">
+        <el-table-column label="车牌号" min-width="140" align="center">
           <template #default="{ row }">
-            <span v-if="row.vehicle_plate">{{ row.vehicle_plate }}</span>
+            <div v-if="row.task_vehicles && row.task_vehicles.length > 1">
+              <div v-for="(tv, idx) in row.task_vehicles" :key="idx" style="font-size:12px;line-height:1.4">
+                {{ idx + 1 }}. {{ tv.vehicle_plate || '待分配' }}
+              </div>
+            </div>
+            <span v-else-if="row.vehicle_plate">{{ row.vehicle_plate }}</span>
             <span v-else style="color:#909399">未排班</span>
+            <el-tag v-if="row.vehicle_count > 1" size="small" type="info" style="margin-top:2px">{{ row.vehicle_count }}台</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="驾驶司机" min-width="120">
+        <el-table-column label="驾驶司机" min-width="140">
           <template #default="{ row }">
-            <div v-if="row.driver_name">
+            <div v-if="row.task_vehicles && row.task_vehicles.length > 1">
+              <div v-for="(tv, idx) in row.task_vehicles" :key="idx" style="font-size:12px;line-height:1.4">
+                {{ idx + 1 }}. {{ tv.driver_name || '待分配' }}
+              </div>
+            </div>
+            <div v-else-if="row.driver_name">
               <div>{{ row.driver_name }}</div>
               <div style="color:#909399;font-size:12px">{{ row.driver_phone }}</div>
             </div>
@@ -472,7 +483,7 @@
     </el-dialog>
 
     <!-- Schedule Dialog -->
-    <el-dialog v-model="scheduleDialogVisible" title="排班分配" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile">
+    <el-dialog v-model="scheduleDialogVisible" title="排班分配" :width="isMobile ? '100%' : '700px'" :fullscreen="isMobile">
       <el-form :label-width="isMobile ? '90px' : '100px'">
         <el-form-item label="出车时间">
           <el-input :model-value="scheduleInfo.task_start + ' ~ ' + scheduleInfo.task_end" disabled />
@@ -483,21 +494,25 @@
         <el-form-item label="司机人工费">
           <el-tag>{{ scheduleInfo.labor_fee }} 元</el-tag>
         </el-form-item>
-        <el-form-item label="选择车辆">
-          <el-select v-model="scheduleForm.vehicle_id" placeholder="请选择车辆" style="width:100%">
-            <el-option v-for="v in scheduleInfo.vehicles" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '') + (v.vehicle_type ? ' ' + v.vehicle_type : '')" :value="v.id" />
-          </el-select>
+        <el-form-item v-if="scheduleInfo.settlement_start" label="结算周期">
+          <span style="color:#909399;font-size:13px">{{ scheduleInfo.settlement_start }}-{{ scheduleInfo.settlement_end }}</span>
         </el-form-item>
-        <el-form-item label="选择司机">
-          <div v-if="scheduleInfo.settlement_start" style="color:#909399;font-size:12px;margin-bottom:4px">结算周期：{{ scheduleInfo.settlement_start }}-{{ scheduleInfo.settlement_end }}</div>
-          <el-select v-model="scheduleForm.driver_id" placeholder="请选择司机" style="width:100%">
-            <el-option v-for="d in scheduleInfo.drivers" :key="d.id" :label="d.name + ' (' + d.phone + ') - 本月结算: ¥' + d.total_labor_fee" :value="d.id" />
+        
+        <el-divider content-position="left">车辆分配（{{ scheduleAssignments.length }}台）</el-divider>
+        
+        <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+          <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
+          <el-select v-model="a.vehicle_id" placeholder="选择车辆" style="flex:1" filterable>
+            <el-option v-for="v in scheduleInfo.vehicles" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
           </el-select>
-        </el-form-item>
+          <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
+            <el-option v-for="d in scheduleInfo.drivers" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id" />
+          </el-select>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="scheduleDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitSchedule">确认任务</el-button>
+        <el-button type="primary" @click="submitSchedule">确认排班</el-button>
       </template>
     </el-dialog>
 
@@ -1004,6 +1019,8 @@ const computedRentalDays = computed(() => {
 const scheduleInfo = ref({ vehicles: [], drivers: [], labor_rate: 0, task_start: '', task_end: '' })
 const scheduleForm = ref({ vehicle_id: null, driver_id: null })
 const scheduleTaskId = ref(null)
+const scheduleAssignments = ref([])
+const currentScheduleTask = ref(null)
 
 const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
 const completeTaskId = ref(null)
@@ -1097,11 +1114,8 @@ const submitTask = async () => {
       await api.put(`/tasks/${editId.value}`, taskForm.value)
       ElMessage.success('更新成功')
     } else {
-      const count = taskForm.value.vehicle_count || 1
-      for (let i = 0; i < count; i++) {
-        await api.post('/tasks', taskForm.value)
-      }
-      ElMessage.success(count > 1 ? `已录入${count}条任务` : '录入成功')
+      await api.post('/tasks', taskForm.value)
+      ElMessage.success('录入成功')
     }
     taskDialogVisible.value = false
     loadTasks()
@@ -1110,7 +1124,23 @@ const submitTask = async () => {
 
 const showScheduleDialog = async (row) => {
   scheduleTaskId.value = row.id
+  currentScheduleTask.value = row
   scheduleForm.value = { vehicle_id: null, driver_id: null }
+  
+  // 根据 vehicle_count 初始化分配列表
+  const count = row.vehicle_count || 1
+  scheduleAssignments.value = Array.from({ length: count }, () => ({ vehicle_id: null, driver_id: null }))
+  
+  // 如果已有排班记录，填充
+  if (row.task_vehicles && row.task_vehicles.length > 0) {
+    row.task_vehicles.forEach((tv, idx) => {
+      if (idx < scheduleAssignments.value.length) {
+        scheduleAssignments.value[idx].vehicle_id = tv.vehicle_id
+        scheduleAssignments.value[idx].driver_id = tv.driver_id
+      }
+    })
+  }
+  
   try {
     const res = await api.get(`/tasks/${row.id}/available-resources`)
     scheduleInfo.value = { ...res.data, destination: row.destination, labor_fee: row.labor_fee }
@@ -1119,12 +1149,16 @@ const showScheduleDialog = async (row) => {
 }
 
 const submitSchedule = async () => {
-  if (!scheduleForm.value.vehicle_id || !scheduleForm.value.driver_id) {
-    ElMessage.warning('请选择车辆和司机')
-    return
+  // 验证所有分配都已填写
+  for (let i = 0; i < scheduleAssignments.value.length; i++) {
+    const a = scheduleAssignments.value[i]
+    if (!a.vehicle_id || !a.driver_id) {
+      ElMessage.warning(`请为第${i + 1}台车选择车辆和司机`)
+      return
+    }
   }
   try {
-    await api.post(`/tasks/${scheduleTaskId.value}/schedule`, scheduleForm.value)
+    await api.post(`/tasks/${scheduleTaskId.value}/schedule`, { assignments: scheduleAssignments.value })
     ElMessage.success('排班成功')
     scheduleDialogVisible.value = false
     loadTasks()

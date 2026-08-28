@@ -188,6 +188,7 @@ class Task(db.Model):
     destination = db.Column(db.String(200), nullable=False)  # 目的地
     vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True)
     driver_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=True)
+    vehicle_count = db.Column(db.Integer, default=1)  # 用车数量
     departure_time = db.Column(db.DateTime, nullable=False)  # 出车时间
     return_time = db.Column(db.DateTime, nullable=True)  # 回程时间
     rental_days = db.Column(db.Float, default=1)  # 租用天数(自动计算)
@@ -228,6 +229,7 @@ class Task(db.Model):
 
     vehicle = db.relationship('Vehicle', backref='tasks')
     driver = db.relationship('Driver', backref='tasks')
+    task_vehicles = db.relationship('TaskVehicle', backref='task', cascade='all,delete-orphan', lazy='dynamic')
 
     def get_change_log(self):
         try:
@@ -269,6 +271,8 @@ class Task(db.Model):
             'destination': self.destination,
             'vehicle_id': self.vehicle_id,
             'driver_id': self.driver_id,
+            'vehicle_count': self.vehicle_count or 1,
+            'task_vehicles': [tv.to_dict() for tv in self.task_vehicles] if hasattr(self, 'task_vehicles') else [],
             'vehicle_plate': self.vehicle.plate_number if self.vehicle else None,
             'vehicle_company': self.vehicle.company if self.vehicle else '',
             'driver_name': self.driver.name if self.driver else None,
@@ -309,6 +313,35 @@ class Task(db.Model):
             'change_log': self.get_change_log(),
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None,
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None
+        }
+
+
+class TaskVehicle(db.Model):
+    """任务车辆分配表 - 一个任务可以分配多台车"""
+    __tablename__ = 'task_vehicles'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=False)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True)
+    driver_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=True)
+    status = db.Column(db.String(20), default='pending')  # pending/scheduled/completed
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    vehicle = db.relationship('Vehicle', backref='task_assignments')
+    driver = db.relationship('Driver', backref='task_assignments')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'task_id': self.task_id,
+            'vehicle_id': self.vehicle_id,
+            'vehicle_plate': self.vehicle.plate_number if self.vehicle else '',
+            'vehicle_capacity': self.vehicle.capacity if self.vehicle else '',
+            'driver_id': self.driver_id,
+            'driver_name': self.driver.name if self.driver else '',
+            'driver_phone': self.driver.phone if self.driver else '',
+            'status': self.status,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
         }
 
 
