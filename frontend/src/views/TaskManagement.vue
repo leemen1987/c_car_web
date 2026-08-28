@@ -362,14 +362,14 @@
         </template>
         <template v-else>
         <el-row :gutter="isMobile ? 0 : 20">
-          <el-col :span="isMobile ? 24 : 8">
+          <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="核定载人数">
               <el-select v-model="taskForm.vehicle_type" placeholder="请选择核定载人数" style="width:100%" filterable allow-create @change="onCapacityChange">
                 <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="isMobile ? 24 : 8">
+          <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="用车数量">
               <el-input-number v-model="taskForm.vehicle_count" :min="1" :max="50" style="width:100%" />
             </el-form-item>
