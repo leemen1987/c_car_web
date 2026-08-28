@@ -1278,7 +1278,10 @@ const getRentalDays = () => {
 const recalcLaborFee = () => {
   if (taskForm.value.labor_rate_id) {
     const rate = laborRates.value.find(r => r.id === taskForm.value.labor_rate_id)
-    if (rate) taskForm.value.labor_fee = rate.labor_rate * Math.ceil(getRentalDays() / rate.days)
+    if (rate) {
+      const count = taskForm.value.vehicle_count || 1
+      taskForm.value.labor_fee = rate.labor_rate * Math.ceil(getRentalDays() / rate.days) * count
+    }
   }
 }
 
@@ -1354,6 +1357,7 @@ const onVehicleCountChange = () => {
     taskForm.value.bridge_fee = singleTolls.value * 2 * count
     recalcFuelFee()
   }
+  recalcLaborFee()
 }
 
 const onLaborRateChange = (rateId) => {
