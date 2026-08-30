@@ -26,6 +26,7 @@
               <el-select v-model="clientQuery.client_type" placeholder="全部" clearable style="width:120px">
                 <el-option label="个人包车" value="personal" />
                 <el-option label="单位包车" value="company" />
+                <el-option label="自驾车" value="selfdrive" />
               </el-select>
             </el-form-item>
             <el-form-item label="收款状态">
@@ -78,14 +79,16 @@
             <el-table-column type="index" label="序号" width="60" align="center" />
             <el-table-column label="包车类型" width="90" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.client_type === 'company' ? 'primary' : 'success'" size="small">
+                <el-tag v-if="row.self_drive" type="info" size="small">自驾车</el-tag>
+                <el-tag v-else :type="row.client_type === 'company' ? 'primary' : 'success'" size="small">
                   {{ row.client_type === 'company' ? '单位' : '个人' }}
                 </el-tag>
               </template>
             </el-table-column>
             <el-table-column label="用车单位" min-width="120">
               <template #default="{ row }">
-                {{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}
+                <span v-if="row.self_drive">-</span>
+                <span v-else>{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="contact_name" label="联系人" width="90" />
@@ -141,6 +144,7 @@
               <el-select v-model="driverQuery.client_type" placeholder="全部" clearable style="width:120px">
                 <el-option label="个人包车" value="personal" />
                 <el-option label="单位包车" value="company" />
+                <el-option label="自驾车" value="selfdrive" />
               </el-select>
             </el-form-item>
             <el-form-item label="收款状态">
@@ -193,14 +197,16 @@
               <el-table-column type="index" label="序号" width="60" align="center" />
               <el-table-column label="包车类型" width="90" align="center">
                 <template #default="{ row }">
-                  <el-tag :type="row.client_type === 'company' ? 'primary' : 'success'" size="small">
+                  <el-tag v-if="row.self_drive" type="info" size="small">自驾车</el-tag>
+                  <el-tag v-else :type="row.client_type === 'company' ? 'primary' : 'success'" size="small">
                     {{ row.client_type === 'company' ? '单位' : '个人' }}
                   </el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="用车单位" min-width="120">
                 <template #default="{ row }">
-                  {{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}
+                  <span v-if="row.self_drive">-</span>
+                  <span v-else>{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</span>
                 </template>
               </el-table-column>
               <el-table-column prop="contact_name" label="联系人" width="90" />
@@ -243,6 +249,7 @@
               <el-select v-model="vehicleQuery.client_type" placeholder="全部" clearable style="width:120px">
                 <el-option label="个人包车" value="personal" />
                 <el-option label="单位包车" value="company" />
+                <el-option label="自驾车" value="selfdrive" />
               </el-select>
             </el-form-item>
             <el-form-item label="收款状态">
@@ -297,14 +304,16 @@
               <el-table-column type="index" label="序号" width="60" align="center" />
               <el-table-column label="包车类型" width="90" align="center">
                 <template #default="{ row }">
-                  <el-tag :type="row.client_type === 'company' ? 'primary' : 'success'" size="small">
+                  <el-tag v-if="row.self_drive" type="info" size="small">自驾车</el-tag>
+                  <el-tag v-else :type="row.client_type === 'company' ? 'primary' : 'success'" size="small">
                     {{ row.client_type === 'company' ? '单位' : '个人' }}
                   </el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="用车单位" min-width="120">
                 <template #default="{ row }">
-                  {{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}
+                  <span v-if="row.self_drive">-</span>
+                  <span v-else>{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</span>
                 </template>
               </el-table-column>
               <el-table-column prop="contact_name" label="联系人" width="90" />
@@ -550,8 +559,8 @@ const exportToExcel = (rows, columns, filename) => {
 
 const exportClient = () => {
   const cols = [
-    { label: '包车类型', formatter: r => r.client_type === 'company' ? '单位' : '个人', width: 10 },
-    { label: '用车单位', formatter: r => r.client_type === 'company' ? (r.client_company || r.client_name) : r.client_name, width: 15 },
+    { label: '包车类型', formatter: r => r.self_drive ? '自驾车' : (r.client_type === 'company' ? '单位' : '个人'), width: 10 },
+    { label: '用车单位', formatter: r => r.self_drive ? '-' : (r.client_type === 'company' ? (r.client_company || r.client_name) : r.client_name), width: 15 },
     { label: '联系人', prop: 'contact_name', width: 10 },
     { label: '确认情况', formatter: r => confirmMap[r.schedule_confirm_status] || '-', width: 10 },
     { label: '出发地点', prop: 'departure', width: 12 },
@@ -569,8 +578,8 @@ const exportClient = () => {
 
 const exportDriver = () => {
   const cols = [
-    { label: '包车类型', formatter: r => r.client_type === 'company' ? '单位' : '个人', width: 10 },
-    { label: '用车单位', formatter: r => r.client_type === 'company' ? (r.client_company || r.client_name) : r.client_name, width: 15 },
+    { label: '包车类型', formatter: r => r.self_drive ? '自驾车' : (r.client_type === 'company' ? '单位' : '个人'), width: 10 },
+    { label: '用车单位', formatter: r => r.self_drive ? '-' : (r.client_type === 'company' ? (r.client_company || r.client_name) : r.client_name), width: 15 },
     { label: '联系人', prop: 'contact_name', width: 10 },
     { label: '出发', prop: 'departure', width: 12 },
     { label: '目的', prop: 'destination', width: 12 },
@@ -585,8 +594,8 @@ const exportDriver = () => {
 
 const exportVehicle = () => {
   const cols = [
-    { label: '包车类型', formatter: r => r.client_type === 'company' ? '单位' : '个人', width: 10 },
-    { label: '用车单位', formatter: r => r.client_type === 'company' ? (r.client_company || r.client_name) : r.client_name, width: 15 },
+    { label: '包车类型', formatter: r => r.self_drive ? '自驾车' : (r.client_type === 'company' ? '单位' : '个人'), width: 10 },
+    { label: '用车单位', formatter: r => r.self_drive ? '-' : (r.client_type === 'company' ? (r.client_company || r.client_name) : r.client_name), width: 15 },
     { label: '联系人', prop: 'contact_name', width: 10 },
     { label: '出发', prop: 'departure', width: 12 },
     { label: '目的', prop: 'destination', width: 12 },

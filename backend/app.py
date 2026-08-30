@@ -1706,7 +1706,9 @@ def report_by_client():
     end_date = request.args.get('end_date', '')
 
     query = Task.query.filter(Task.status != 'cancelled')
-    if client_type:
+    if client_type == 'selfdrive':
+        query = query.filter(Task.self_drive == True)
+    elif client_type:
         query = query.filter(Task.client_type == client_type)
     if client:
         query = query.filter(Task.client_name.like(f'%{client}%'))
@@ -1764,7 +1766,9 @@ def report_by_driver():
     end_date = request.args.get('end_date', '')
 
     query = Task.query.filter(Task.driver_id.isnot(None), Task.status != 'cancelled')
-    if client_type:
+    if client_type == 'selfdrive':
+        query = query.filter(Task.self_drive == True)
+    elif client_type:
         query = query.filter(Task.client_type == client_type)
     if driver_id:
         query = query.filter(Task.driver_id == driver_id)
@@ -1827,7 +1831,9 @@ def report_by_vehicle():
     end_date = request.args.get('end_date', '')
 
     query = Task.query.filter(Task.vehicle_id.isnot(None), Task.status != 'cancelled')
-    if client_type:
+    if client_type == 'selfdrive':
+        query = query.filter(Task.self_drive == True)
+    elif client_type:
         query = query.filter(Task.client_type == client_type)
     if vehicle_id:
         query = query.filter(Task.vehicle_id == vehicle_id)
@@ -2390,6 +2396,20 @@ def list_confirmations():
             'items': [c.to_dict() for c in pagination.items]
         }
     })
+
+
+@app.route('/api/confirmations/<int:confirmation_id>', methods=['DELETE'])
+@login_required
+def delete_confirmation(confirmation_id):
+    """删除确认记录"""
+    conf = ScheduleConfirmation.query.get(confirmation_id)
+    if not conf:
+        return jsonify({'code': 404, 'msg': '确认记录不存在'})
+    # 删除关联的快照
+    ConfirmationSnapshot.query.filter_by(confirmation_id=conf.id).delete()
+    db.session.delete(conf)
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '删除成功'})
 
 
 # ==================== Init DB ====================

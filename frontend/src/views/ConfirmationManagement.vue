@@ -76,11 +76,16 @@
             <span v-else style="color:#c0c4cc">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <div style="display:flex;flex-wrap:nowrap;gap:4px;white-space:nowrap">
               <el-button type="primary" size="small" @click="showDetail(row)">详情</el-button>
               <el-button v-if="row.confirm_status === 'pending'" type="warning" size="small" @click="copyLink(row)">复制链接</el-button>
+              <el-popconfirm title="确认删除该确认记录?" @confirm="deleteConfirmation(row.id)">
+                <template #reference>
+                  <el-button type="danger" size="small">删除</el-button>
+                </template>
+              </el-popconfirm>
             </div>
           </template>
         </el-table-column>
@@ -208,6 +213,14 @@ const fallbackCopy = (text) => {
     ElMessage.error('复制失败，请手动复制')
   }
   document.body.removeChild(textarea)
+}
+
+const deleteConfirmation = async (id) => {
+  try {
+    await api.delete(`/confirmations/${id}`)
+    ElMessage.success('删除成功')
+    loadConfirmations()
+  } catch (e) {}
 }
 
 onMounted(() => {

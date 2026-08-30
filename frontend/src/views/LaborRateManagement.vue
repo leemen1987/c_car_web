@@ -15,7 +15,7 @@
       </template>
 
       <el-table :data="rates" stripe style="width:100%">
-        <el-table-column prop="id" label="ID" width="60" align="center" />
+        <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="location" label="目的地" min-width="200" />
         <el-table-column prop="labor_rate" label="人工费标准(元)" min-width="160" align="right" />
         <el-table-column prop="days" label="天数" width="100" align="center" />
