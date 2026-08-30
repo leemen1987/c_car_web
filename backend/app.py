@@ -1353,14 +1353,25 @@ def build_yzj_approval_body(task, row_id=1):
         client_display = task.client_name or ''
     contact_display = f"{task.client_name} {task.client_phone}".strip() if task.client_name else ''
 
+    # 车牌号和司机：优先使用 task_vehicles（多车），回退到主车辆
+    task_vehicles = list(task.task_vehicles) if hasattr(task, 'task_vehicles') else []
+    if task_vehicles:
+        plates = [f"{i+1}.{tv.vehicle_plate}" for i, tv in enumerate(task_vehicles) if tv.vehicle_plate]
+        drivers = [f"{i+1}.{tv.driver_name}" for i, tv in enumerate(task_vehicles) if tv.driver_name]
+        plate_display = ";".join(plates)
+        driver_display = ";".join(drivers)
+    else:
+        plate_display = task.vehicle.plate_number if task.vehicle else ''
+        driver_display = task.driver.name if task.driver else ''
+
     return {
         '_id_': str(row_id),
         'Te_0': client_display,       # 用车方
         'Te_1': contact_display,      # 联系人
         'Te_2': task.departure or '',          # 出发地点
         'Te_3': task.destination or '',        # 目的地
-        'Te_4': task.vehicle.plate_number if task.vehicle else '',  # 车牌号
-        'Te_5': task.driver.name if task.driver else '',            # 驾驶司机
+        'Te_4': plate_display,                  # 车牌号
+        'Te_5': driver_display,                 # 驾驶司机
         'Te_6': task.departure_time.strftime('%Y-%m-%d %H:%M') if task.departure_time else '',  # 出车时间
         'Te_7': task.return_time.strftime('%Y-%m-%d %H:%M') if task.return_time else '',        # 回程时间
         'Te_8': task.vehicle_type or '',        # 车辆类型
