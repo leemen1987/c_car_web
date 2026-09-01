@@ -1238,6 +1238,12 @@ def complete_task(task_id):
     task.paid_date = datetime.strptime(paid_date, '%Y-%m-%d') if paid_date else None
     task.paid_method = data.get('paid_method', '')
     
+    # 处理回程时间（自驾车任务可能在此时填写）
+    return_time = data.get('return_time')
+    if return_time and not task.return_time:
+        task.return_time = datetime.strptime(return_time, '%Y-%m-%d %H:%M')
+        task.rental_days = calc_rental_days(task.departure_time, task.return_time)
+    
     # 处理里程数
     start_mileage = data.get('start_mileage', 0)
     end_mileage = data.get('end_mileage', 0)

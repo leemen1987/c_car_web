@@ -484,6 +484,11 @@
     <!-- Complete Task Dialog -->
     <el-dialog v-model="completeDialogVisible" :title="isSelfDriveComplete ? '完成任务 - 录入里程' : '完成任务 - 录入实际费用'" :width="isMobile ? '100%' : '500px'" :fullscreen="isMobile">
       <el-form :model="completeForm" :label-width="isMobile ? '100px' : '110px'">
+        <template v-if="isSelfDriveComplete && !currentCompleteTask?.return_time">
+        <el-form-item label="回程时间">
+          <el-date-picker v-model="completeForm.return_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" placeholder="请选择回程时间" />
+        </el-form-item>
+        </template>
         <template v-if="!isSelfDriveComplete">
         <el-form-item label="油电费(预估)">
           <el-input :model-value="completeForm.actual_fuel_fee" disabled />
@@ -976,7 +981,8 @@ const currentContacts = computed(() => {
 const computedRentalDays = computed(() => {
   const dt = taskForm.value.departure_time
   const rt = taskForm.value.return_time
-  if (!dt || !rt) return '请填写出车和回程时间'
+  if (!dt) return '请填写出车时间'
+  if (!rt) return taskForm.value.self_drive ? '待定（回程时填写）' : '请填写回程时间'
   const d = new Date(dt), r = new Date(rt)
   if (r <= d) return '0.5'
   const hours = (r - d) / 3600000
@@ -1074,15 +1080,19 @@ const submitTask = async () => {
     ElMessage.warning('请填写出发地和目的地')
     return
   }
-  if (!taskForm.value.departure_time || !taskForm.value.return_time) {
-    ElMessage.warning('请填写出车和回程时间')
+  if (!taskForm.value.departure_time) {
+    ElMessage.warning('请填写出车时间')
+    return
+  }
+  if (!taskForm.value.self_drive && !taskForm.value.return_time) {
+    ElMessage.warning('请填写回程时间')
     return
   }
   if (new Date(taskForm.value.departure_time) < new Date()) {
     ElMessage.warning('出车时间不能选择过去的时间')
     return
   }
-  if (new Date(taskForm.value.return_time) < new Date(taskForm.value.departure_time)) {
+  if (taskForm.value.return_time && new Date(taskForm.value.return_time) < new Date(taskForm.value.departure_time)) {
     ElMessage.warning('回程时间不能早于出车时间')
     return
   }
@@ -1196,7 +1206,8 @@ const showCompleteDialog = (row) => {
     paid_date: '',
     paid_method: '',
     start_mileage: startMileage,
-    end_mileage: 0
+    end_mileage: 0,
+    return_time: row.return_time || ''
   }
   completeDialogVisible.value = true
 }
