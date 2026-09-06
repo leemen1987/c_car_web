@@ -401,7 +401,7 @@
       </el-checkbox-group>
       <template #footer>
         <el-button @click="resetColumns">恢复默认</el-button>
-        <el-button type="primary" @click="showColumnSettings = false">确定</el-button>
+        <el-button type="primary" @click="saveColumnSettings">确定</el-button>
       </template>
     </el-dialog>
 
@@ -473,13 +473,20 @@ const allColumns = [
   { key: 'end_mileage', label: '结束里程' },
 ]
 const defaultVisibleColumns = ['status']
-const visibleColumns = ref([...defaultVisibleColumns])
+const savedColumns = localStorage.getItem('report_visible_columns')
+const visibleColumns = ref(savedColumns ? JSON.parse(savedColumns) : [...defaultVisibleColumns])
 
 const resetColumns = () => {
   visibleColumns.value = [...defaultVisibleColumns]
+  localStorage.setItem('report_visible_columns', JSON.stringify(visibleColumns.value))
 }
 
 const isColumnVisible = (key) => visibleColumns.value.includes(key)
+
+const saveColumnSettings = () => {
+  localStorage.setItem('report_visible_columns', JSON.stringify(visibleColumns.value))
+  showColumnSettings.value = false
+}
 
 const editDialogVisible = ref(false)
 const editForm = ref({ id: null, rental_fee: 0, actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, is_paid: false, paid_date: '', paid_method: '', remark: '' })
