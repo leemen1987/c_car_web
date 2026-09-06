@@ -489,6 +489,11 @@
           <el-date-picker v-model="completeForm.return_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" placeholder="请选择回程时间" />
         </el-form-item>
         </template>
+        <template v-if="isSelfDriveComplete">
+        <el-form-item label="租车费(元)">
+          <el-input-number v-model="completeForm.rental_fee" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        </template>
         <template v-if="!isSelfDriveComplete">
         <el-form-item label="油电费(预估)">
           <el-input :model-value="completeForm.actual_fuel_fee" disabled />
@@ -1207,7 +1212,8 @@ const showCompleteDialog = (row) => {
     paid_method: '',
     start_mileage: startMileage,
     end_mileage: 0,
-    return_time: row.return_time || ''
+    return_time: row.return_time || '',
+    rental_fee: row.rental_fee || 0
   }
   completeDialogVisible.value = true
 }

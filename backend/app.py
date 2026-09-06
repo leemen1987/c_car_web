@@ -1230,8 +1230,6 @@ def complete_task(task_id):
     task.actual_bridge_fee = data.get('actual_bridge_fee', 0)
     task.actual_labor_fee = data.get('actual_labor_fee', 0)
     task.other_fee = data.get('other_fee', 0)
-    task.actual_cost = task.actual_fuel_fee + task.actual_bridge_fee + task.actual_labor_fee + task.other_fee
-    task.final_profit = task.rental_fee - task.actual_cost
     task.remark = data.get('remark', '')
     task.is_paid = data.get('is_paid', False)
     paid_date = data.get('paid_date')
@@ -1243,6 +1241,15 @@ def complete_task(task_id):
     if return_time and not task.return_time:
         task.return_time = datetime.strptime(return_time, '%Y-%m-%d %H:%M')
         task.rental_days = calc_rental_days(task.departure_time, task.return_time)
+    
+    # 处理租车费（自驾车任务完成时填写）
+    rental_fee = data.get('rental_fee')
+    if rental_fee is not None:
+        task.rental_fee = rental_fee
+    
+    # 计算成本和利润
+    task.actual_cost = task.actual_fuel_fee + task.actual_bridge_fee + task.actual_labor_fee + task.other_fee
+    task.final_profit = task.rental_fee - task.actual_cost
     
     # 处理里程数
     start_mileage = data.get('start_mileage', 0)
