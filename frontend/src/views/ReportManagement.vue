@@ -121,6 +121,18 @@
                 <span v-else style="color:#c0c4cc">-</span>
               </template>
             </el-table-column>
+            <el-table-column v-if="isColumnVisible('start_mileage')" label="起始里程" width="90" align="right">
+              <template #default="{ row }">
+                <span v-if="row.start_mileage">{{ row.start_mileage.toLocaleString() }}</span>
+                <span v-else style="color:#c0c4cc">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column v-if="isColumnVisible('end_mileage')" label="结束里程" width="90" align="right">
+              <template #default="{ row }">
+                <span v-if="row.end_mileage">{{ row.end_mileage.toLocaleString() }}</span>
+                <span v-else style="color:#c0c4cc">-</span>
+              </template>
+            </el-table-column>
             <el-table-column v-if="isColumnVisible('confirm')" label="确认情况" width="90" align="center">
               <template #default="{ row }">
                 <el-tag v-if="row.schedule_confirm_status === 'confirmed'" type="success" size="small">已确认</el-tag>
@@ -222,6 +234,18 @@
                     <el-tag v-else type="danger" size="small">未收款</el-tag>
                     <div v-if="row.is_paid && row.paid_date" style="font-size:11px;color:#909399;margin-top:2px">{{ row.paid_date }} {{ row.paid_method || '' }}</div>
                   </template>
+                  <span v-else style="color:#c0c4cc">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column v-if="isColumnVisible('start_mileage')" label="起始里程" width="90" align="right">
+                <template #default="{ row }">
+                  <span v-if="row.start_mileage">{{ row.start_mileage.toLocaleString() }}</span>
+                  <span v-else style="color:#c0c4cc">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column v-if="isColumnVisible('end_mileage')" label="结束里程" width="90" align="right">
+                <template #default="{ row }">
+                  <span v-if="row.end_mileage">{{ row.end_mileage.toLocaleString() }}</span>
                   <span v-else style="color:#c0c4cc">-</span>
                 </template>
               </el-table-column>
@@ -334,6 +358,18 @@
                     <el-tag v-else type="danger" size="small">未收款</el-tag>
                     <div v-if="row.is_paid && row.paid_date" style="font-size:11px;color:#909399;margin-top:2px">{{ row.paid_date }} {{ row.paid_method || '' }}</div>
                   </template>
+                  <span v-else style="color:#c0c4cc">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column v-if="isColumnVisible('start_mileage')" label="起始里程" width="90" align="right">
+                <template #default="{ row }">
+                  <span v-if="row.start_mileage">{{ row.start_mileage.toLocaleString() }}</span>
+                  <span v-else style="color:#c0c4cc">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column v-if="isColumnVisible('end_mileage')" label="结束里程" width="90" align="right">
+                <template #default="{ row }">
+                  <span v-if="row.end_mileage">{{ row.end_mileage.toLocaleString() }}</span>
                   <span v-else style="color:#c0c4cc">-</span>
                 </template>
               </el-table-column>
