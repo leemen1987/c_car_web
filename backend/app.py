@@ -1024,6 +1024,14 @@ def update_task(task_id):
     if 'remark' in data:
         task.remark = data['remark']
 
+    # 如果修改了结束里程，同步更新车辆里程（取较大值）
+    if 'end_mileage' in data and task.vehicle_id:
+        new_end = float(data['end_mileage'] or 0)
+        if new_end > 0:
+            vehicle = Vehicle.query.get(task.vehicle_id)
+            if vehicle and new_end > (vehicle.mileage or 0):
+                vehicle.mileage = new_end
+
     db.session.commit()
     return jsonify({'code': 200, 'msg': '更新成功', 'data': task.to_dict()})
 
