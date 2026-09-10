@@ -416,6 +416,13 @@
         <el-form-item label="其他费用">
           <el-input-number v-model="editForm.other_fee" :min="0" :precision="2" style="width:100%" />
         </el-form-item>
+        <el-divider>里程数</el-divider>
+        <el-form-item label="起始里程(km)">
+          <el-input-number v-model="editForm.start_mileage" :min="0" :precision="0" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="结束里程(km)">
+          <el-input-number v-model="editForm.end_mileage" :min="0" :precision="0" style="width:100%" />
+        </el-form-item>
         <el-form-item label="是否已收款">
           <el-switch v-model="editForm.is_paid" />
         </el-form-item>
@@ -482,7 +489,7 @@ const saveColumnSettings = () => {
 }
 
 const editDialogVisible = ref(false)
-const editForm = ref({ id: null, rental_fee: 0, actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, is_paid: false, paid_date: '', paid_method: '', remark: '' })
+const editForm = ref({ id: null, rental_fee: 0, actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, is_paid: false, paid_date: '', paid_method: '', remark: '', start_mileage: 0, end_mileage: 0 })
 
 const openEdit = (row) => {
   editForm.value = {
@@ -495,7 +502,9 @@ const openEdit = (row) => {
     is_paid: row.is_paid || false,
     paid_date: row.paid_date || '',
     paid_method: row.paid_method || '',
-    remark: row.remark || ''
+    remark: row.remark || '',
+    start_mileage: row.start_mileage || 0,
+    end_mileage: row.end_mileage || 0
   }
   editDialogVisible.value = true
 }
