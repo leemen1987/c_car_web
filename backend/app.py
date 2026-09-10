@@ -973,7 +973,9 @@ def update_task(task_id):
         'rental_fee': '租车费',
         'fuel_fee': '油电费',
         'bridge_fee': '桥路费',
-        'labor_fee': '司机人工费'
+        'labor_fee': '司机人工费',
+        'start_mileage': '起始里程',
+        'end_mileage': '结束里程'
     }
 
     # Take snapshot before applying changes
@@ -983,7 +985,7 @@ def update_task(task_id):
             old_val = getattr(task, field)
             new_val = data[field]
             # Normalize comparison
-            if field in ('mileage', 'rental_fee', 'fuel_fee', 'bridge_fee', 'labor_fee'):
+            if field in ('mileage', 'rental_fee', 'fuel_fee', 'bridge_fee', 'labor_fee', 'start_mileage', 'end_mileage'):
                 changed = float(old_val or 0) != float(new_val or 0)
             elif field in ('departure_time', 'return_time'):
                 old_str = old_val.strftime('%Y-%m-%d %H:%M') if old_val else ''
