@@ -87,8 +87,8 @@
             </el-table-column>
             <el-table-column label="用车单位" min-width="120">
               <template #default="{ row }">
-                <span v-if="row.self_drive">-</span>
-                <span v-else>{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</span>
+                <span>{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</span>
+                <el-tag v-if="row.self_drive" type="info" size="small" style="margin-left:4px">自驾车</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="contact_name" label="联系人" width="90" />
@@ -102,13 +102,6 @@
             <el-table-column prop="final_profit" label="最终利润" width="100" align="right">
               <template #default="{ row }">
                 <span :style="{ color: row.final_profit >= 0 ? '#67c23a' : '#f56c6c' }">{{ row.final_profit }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column v-if="isColumnVisible('status')" prop="status" label="状态" width="90" align="center">
-              <template #default="{ row }">
-                <el-tag :type="row.status === 'completed' ? 'success' : row.status === 'scheduled' ? 'primary' : row.status === 'cancelled' ? 'danger' : 'warning'">
-                  {{ row.status === 'completed' ? '已完成' : row.status === 'scheduled' ? '已排班' : row.status === 'cancelled' ? '已取消' : '待排班' }}
-                </el-tag>
               </template>
             </el-table-column>
             <el-table-column label="收款" width="120" align="center">
@@ -217,8 +210,8 @@
               </el-table-column>
               <el-table-column label="用车单位" min-width="120">
                 <template #default="{ row }">
-                  <span v-if="row.self_drive">-</span>
-                  <span v-else>{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</span>
+                  <span>{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</span>
+                  <el-tag v-if="row.self_drive" type="info" size="small" style="margin-left:4px">自驾车</el-tag>
                 </template>
               </el-table-column>
               <el-table-column prop="contact_name" label="联系人" width="90" />
@@ -336,8 +329,8 @@
               </el-table-column>
               <el-table-column label="用车单位" min-width="120">
                 <template #default="{ row }">
-                  <span v-if="row.self_drive">-</span>
-                  <span v-else>{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</span>
+                  <span>{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</span>
+                  <el-tag v-if="row.self_drive" type="info" size="small" style="margin-left:4px">自驾车</el-tag>
                 </template>
               </el-table-column>
               <el-table-column prop="contact_name" label="联系人" width="90" />
