@@ -465,7 +465,7 @@ const allColumns = [
   { key: 'start_mileage', label: '起始里程' },
   { key: 'end_mileage', label: '结束里程' },
 ]
-const defaultVisibleColumns = ['status']
+const defaultVisibleColumns = ['status', 'start_mileage']
 const savedColumns = localStorage.getItem('report_visible_columns')
 const visibleColumns = ref(savedColumns ? JSON.parse(savedColumns) : [...defaultVisibleColumns])
 

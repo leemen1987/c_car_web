@@ -1205,6 +1205,12 @@ def schedule_task(task_id):
     task.driver_id = assignments[0].get('driver_id')
     task.status = 'scheduled'
     
+    # 记录排班时车辆的当前里程作为起始里程
+    if task.start_mileage == 0:
+        first_vehicle = Vehicle.query.get(assignments[0]['vehicle_id'])
+        if first_vehicle:
+            task.start_mileage = first_vehicle.mileage or 0
+    
     # 更新相关车辆状态
     for a in assignments:
         vehicle = Vehicle.query.get(a['vehicle_id'])
