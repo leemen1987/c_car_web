@@ -311,23 +311,25 @@ def driver_settlement_stats():
 @app.route('/api/drivers/<int:driver_id>/history')
 @login_required
 def driver_history(driver_id):
-    """司机历史任务与结算费用查询，按结算周期分组汇总"""
+    """司机历史任务与结算费用查询
+    settlement_month(YYYY-MM)：按结算月份筛选任务明细，周期为上月26日至本月25日
+    """
     driver = Driver.query.get(driver_id)
     if not driver:
         return jsonify({'code': 404, 'msg': '司机不存在'})
 
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    settlement_month = request.args.get('settlement_month', '').strip()
 
     # 全部有效任务（已完成 + 已排班），按出车时间倒序
-    query = Task.query.filter(
+    base_query = Task.query.filter(
         Task.driver_id == driver_id,
         Task.status.in_(['completed', 'scheduled'])
-    ).order_by(Task.departure_time.desc())
+    )
+    all_tasks = base_query.order_by(Task.departure_time.desc()).all()
 
-    all_tasks = query.all()
-
-    # 按结算周期分组汇总
+    # 按结算周期分组汇总（全部周期概览）
     period_map = {}
     for t in all_tasks:
         _, _, label = get_period_bounds(t.departure_time)
@@ -348,26 +350,50 @@ def driver_history(driver_id):
         else:
             p['unpaid_labor_fee'] += fee
 
-    # 周期按开始日期倒序
     period_summary = sorted(period_map.values(), key=lambda x: x['period'], reverse=True)
+    # 结算月份 = 周期结束日所在月（label 格式: "2026-07-26 ~ 2026-08-25" → "2026-08"）
+    available_months = sorted({p['period'].split(' ~ ')[1][:7] for p in period_summary}, reverse=True)
 
+    # 按结算月份筛选任务明细
+    if settlement_month:
+        try:
+            ps, pe = settlement_range_for_month(settlement_month)
+            start_dt = datetime.combine(ps, datetime.min.time())
+            end_dt = datetime.combine(pe, datetime.max.time())
+            filtered = [t for t in all_tasks if start_dt <= t.departure_time <= end_dt]
+        except (ValueError, IndexError):
+            filtered = all_tasks
+            settlement_month = ''
+    else:
+        filtered = all_tasks
+
+    # 当前筛选范围的汇总
     totals = {
-        'task_count': len(all_tasks),
-        'total_labor_fee': sum(p['total_labor_fee'] for p in period_summary),
-        'paid_labor_fee': sum(p['paid_labor_fee'] for p in period_summary),
-        'unpaid_labor_fee': sum(p['unpaid_labor_fee'] for p in period_summary)
+        'task_count': len(filtered),
+        'total_labor_fee': 0.0,
+        'paid_labor_fee': 0.0,
+        'unpaid_labor_fee': 0.0
     }
+    for t in filtered:
+        fee = float(t.actual_labor_fee or 0) if t.status == 'completed' else float(t.labor_fee or 0)
+        totals['total_labor_fee'] += fee
+        if t.is_paid:
+            totals['paid_labor_fee'] += fee
+        else:
+            totals['unpaid_labor_fee'] += fee
 
     # 分页任务明细
-    total = len(all_tasks)
+    total = len(filtered)
     start_idx = (page - 1) * per_page
-    paged_tasks = [t.to_dict() for t in all_tasks[start_idx:start_idx + per_page]]
+    paged_tasks = [t.to_dict() for t in filtered[start_idx:start_idx + per_page]]
 
     return jsonify({
         'code': 200,
         'data': {
             'driver': {'id': driver.id, 'name': driver.name, 'phone': driver.phone},
             'period_summary': period_summary,
+            'available_months': available_months,
+            'settlement_month': settlement_month,
             'totals': totals,
             'tasks': paged_tasks,
             'total': total,
@@ -422,6 +448,19 @@ def get_period_bounds(dt):
         end = d.replace(day=25)
     label = f"{start.isoformat()} ~ {end.isoformat()}"
     return start, end, label
+
+
+def settlement_range_for_month(month_str):
+    """按结算月份(YYYY-MM)返回结算周期 (start_date, end_date)
+    结算月份指周期结束所在月：2026-08 → 2026-07-26 ~ 2026-08-25
+    """
+    year, month = int(month_str[:4]), int(month_str[5:7])
+    end = date(year, month, 25)
+    if month == 1:
+        start = date(year - 1, 12, 26)
+    else:
+        start = date(year, month - 1, 26)
+    return start, end
 
 
 def _parse_date(val):

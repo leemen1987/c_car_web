@@ -104,6 +104,19 @@
     <!-- 历史任务弹窗 -->
     <el-dialog v-model="historyVisible" :title="`${historyDriver?.name || ''} - 历史任务与结算`" width="960px" top="5vh">
       <div v-if="historyData">
+        <!-- 结算月份选择 -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+          <span style="font-size:13px;color:#606266">结算月份：</span>
+          <el-select v-model="historyMonth" style="width:200px" @change="loadHistory(1)">
+            <el-option label="全部历史" value="" />
+            <el-option v-for="m in historyData.available_months" :key="m" :label="`${m}（结算周期至${m}-25）`" :value="m" />
+          </el-select>
+          <el-button type="primary" size="small" @click="loadHistory(1)">查询</el-button>
+          <span v-if="historyMonth" style="font-size:12px;color:#909399">
+            周期：{{ historyMonth }}的周期为上月26日 - {{ historyMonth }}-25
+          </span>
+        </div>
+
         <!-- 总计徽标 -->
         <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
           <el-tag type="info" size="large">总任务 {{ historyData.totals.task_count }}</el-tag>
@@ -112,10 +125,10 @@
           <el-tag type="danger" size="large">未收 ¥{{ historyData.totals.unpaid_labor_fee.toFixed(0) }}</el-tag>
         </div>
 
-        <!-- 按结算周期汇总 -->
+        <!-- 按结算周期汇总（点击行选择该周期） -->
         <div style="margin-bottom:16px">
-          <div style="font-size:14px;font-weight:600;margin-bottom:8px;color:#303133">按结算周期汇总</div>
-          <el-table :data="historyData.period_summary" border size="small" max-height="200">
+          <div style="font-size:14px;font-weight:600;margin-bottom:8px;color:#303133">按结算周期汇总（点击行选择该周期）</div>
+          <el-table :data="historyData.period_summary" border size="small" max-height="200" highlight-current-row @current-change="onPeriodSelect">
             <el-table-column prop="period" label="结算周期" min-width="200" />
             <el-table-column prop="task_count" label="任务数" width="80" align="center" />
             <el-table-column label="总人工费" width="110" align="right">
@@ -228,23 +241,44 @@ const historyVisible = ref(false)
 const historyDriver = ref(null)
 const historyData = ref(null)
 const historyPage = ref(1)
+const historyMonth = ref('')
 
 const openHistory = (row) => {
   historyDriver.value = row
   historyData.value = null
   historyPage.value = 1
+  // 默认选中当前结算月份（周期结束月）
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = now.getMonth() + 1
+  historyMonth.value = now.getDate() >= 26
+    ? (m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`)
+    : `${y}-${String(m).padStart(2, '0')}`
   historyVisible.value = true
   loadHistory(1)
 }
 
 const loadHistory = async (page) => {
   try {
-    const res = await api.get(`/drivers/${historyDriver.value.id}/history`, { params: { page, per_page: 20 } })
+    const res = await api.get(`/drivers/${historyDriver.value.id}/history`, {
+      params: { page, per_page: 20, settlement_month: historyMonth.value }
+    })
     if (res.code === 200) {
       historyData.value = res.data
       historyPage.value = res.data.page
     }
   } catch (e) {}
+}
+
+// 点击周期汇总行 → 选择该周期
+const onPeriodSelect = (row) => {
+  if (!row) return
+  // period 格式 "2026-07-26 ~ 2026-08-25" → 结算月 "2026-08"
+  const month = row.period.split(' ~ ')[1]?.slice(0, 7)
+  if (month && month !== historyMonth.value) {
+    historyMonth.value = month
+    loadHistory(1)
+  }
 }
 
 const submitForm = async () => {
