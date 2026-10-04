@@ -65,9 +65,10 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="170" />
-        <el-table-column label="操作" width="180" align="center">
+        <el-table-column label="操作" width="240" align="center">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="showEdit(row)">编辑</el-button>
+            <el-button type="info" size="small" plain @click="openHistory(row)">历史</el-button>
             <el-popconfirm title="确认删除?" @confirm="handleDelete(row.id)">
               <template #reference>
                 <el-button type="danger" size="small">删除</el-button>
@@ -98,6 +99,85 @@
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitForm">确定</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 历史任务弹窗 -->
+    <el-dialog v-model="historyVisible" :title="`${historyDriver?.name || ''} - 历史任务与结算`" width="960px" top="5vh">
+      <div v-if="historyData">
+        <!-- 总计徽标 -->
+        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <el-tag type="info" size="large">总任务 {{ historyData.totals.task_count }}</el-tag>
+          <el-tag type="primary" size="large">总人工费 ¥{{ historyData.totals.total_labor_fee.toFixed(0) }}</el-tag>
+          <el-tag type="success" size="large">已收 ¥{{ historyData.totals.paid_labor_fee.toFixed(0) }}</el-tag>
+          <el-tag type="danger" size="large">未收 ¥{{ historyData.totals.unpaid_labor_fee.toFixed(0) }}</el-tag>
+        </div>
+
+        <!-- 按结算周期汇总 -->
+        <div style="margin-bottom:16px">
+          <div style="font-size:14px;font-weight:600;margin-bottom:8px;color:#303133">按结算周期汇总</div>
+          <el-table :data="historyData.period_summary" border size="small" max-height="200">
+            <el-table-column prop="period" label="结算周期" min-width="200" />
+            <el-table-column prop="task_count" label="任务数" width="80" align="center" />
+            <el-table-column label="总人工费" width="110" align="right">
+              <template #default="{ row }">¥{{ row.total_labor_fee.toFixed(2) }}</template>
+            </el-table-column>
+            <el-table-column label="已收" width="110" align="right">
+              <template #default="{ row }">
+                <span style="color:#67c23a">¥{{ row.paid_labor_fee.toFixed(2) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="未收" width="110" align="right">
+              <template #default="{ row }">
+                <span :style="{ color: row.unpaid_labor_fee > 0 ? '#f56c6c' : '#909399' }">¥{{ row.unpaid_labor_fee.toFixed(2) }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <!-- 任务明细 -->
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px;color:#303133">任务明细</div>
+        <el-table :data="historyData.tasks" border size="small" max-height="360">
+          <el-table-column prop="departure_time" label="出车时间" width="145" />
+          <el-table-column label="路线" min-width="160">
+            <template #default="{ row }">{{ row.departure }} → {{ row.destination }}</template>
+          </el-table-column>
+          <el-table-column prop="client_name" label="用车单位" min-width="100" />
+          <el-table-column label="预估人工费" width="100" align="right">
+            <template #default="{ row }">¥{{ row.labor_fee }}</template>
+          </el-table-column>
+          <el-table-column label="实际人工费" width="100" align="right">
+            <template #default="{ row }">¥{{ row.actual_labor_fee || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'completed' ? 'success' : 'primary'" size="small">
+                {{ row.status === 'completed' ? '已完成' : '已排班' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="收款" width="130" align="center">
+            <template #default="{ row }">
+              <template v-if="row.is_paid">
+                <el-tag type="success" size="small">已收款</el-tag>
+                <div v-if="row.paid_date" style="font-size:11px;color:#909399">{{ row.paid_date }}</div>
+              </template>
+              <el-tag v-else type="danger" size="small">未收款</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <!-- 分页 -->
+        <div style="display:flex;justify-content:flex-end;margin-top:12px">
+          <el-pagination
+            v-model:current-page="historyPage"
+            :page-size="historyData.per_page"
+            :total="historyData.total"
+            layout="prev, pager, next, total"
+            @current-change="loadHistory"
+          />
+        </div>
+      </div>
+      <el-skeleton v-else :rows="6" animated />
     </el-dialog>
   </div>
 </template>
@@ -142,6 +222,30 @@ const loadSettlementStats = async () => {
 
 const showAdd = () => { isEdit.value = false; form.value = { name: '', phone: '', status: 'available' }; dialogVisible.value = true }
 const showEdit = (row) => { isEdit.value = true; editId.value = row.id; form.value = { name: row.name, phone: row.phone, status: row.status }; dialogVisible.value = true }
+
+// 历史任务
+const historyVisible = ref(false)
+const historyDriver = ref(null)
+const historyData = ref(null)
+const historyPage = ref(1)
+
+const openHistory = (row) => {
+  historyDriver.value = row
+  historyData.value = null
+  historyPage.value = 1
+  historyVisible.value = true
+  loadHistory(1)
+}
+
+const loadHistory = async (page) => {
+  try {
+    const res = await api.get(`/drivers/${historyDriver.value.id}/history`, { params: { page, per_page: 20 } })
+    if (res.code === 200) {
+      historyData.value = res.data
+      historyPage.value = res.data.page
+    }
+  } catch (e) {}
+}
 
 const submitForm = async () => {
   if (!form.value.name || !form.value.phone) { ElMessage.warning('请填写完整信息'); return }
