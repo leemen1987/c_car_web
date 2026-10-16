@@ -1099,8 +1099,8 @@ const showEditDialog = (row) => {
 }
 
 const submitTask = async () => {
-  if (taskForm.value.client_type === 'personal' && (!taskForm.value.client_name || !taskForm.value.client_phone)) {
-    ElMessage.warning('请填写姓名和手机号码')
+  if (taskForm.value.client_type === 'personal' && !taskForm.value.client_name) {
+    ElMessage.warning('请填写姓名')
     return
   }
   if (taskForm.value.client_type === 'company' && (!taskForm.value.client_id || !taskForm.value.contact_id)) {
