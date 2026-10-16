@@ -315,14 +315,16 @@
               <div style="width:100%">
                 <div v-for="(p, idx) in taskForm.capacityPlan" :key="idx" style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
                   <span style="width:28px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
-                  <el-select v-model="p.vehicle_type" placeholder="核定载人数" style="flex:1" filterable allow-create @change="recalcFuelFee">
+                  <el-select v-model="p.vehicle_type" placeholder="核定载人数" style="width:130px" filterable allow-create @change="recalcFuelFee">
                     <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
                   </el-select>
                   <span style="color:#909399;font-size:13px">× </span>
                   <el-input-number v-model="p.count" :min="1" :max="20" size="small" style="width:90px" controls-position="right" @change="onVehicleCountChange" />
                   <el-button v-if="taskForm.capacityPlan.length > 1" type="danger" link size="small" @click="removeCapacityRow(idx)">删除</el-button>
                 </div>
-                <el-button type="primary" size="small" plain @click="addCapacityRow">+ 添加车辆</el-button>
+                <el-button size="small" plain @click="addCapacityRow">
+                  <el-icon><Plus /></el-icon><span style="margin-left:2px">添加车辆</span>
+                </el-button>
                 <span style="margin-left:12px;color:#909399;font-size:13px">共 {{ totalVehicleCount }} 台车</span>
               </div>
             </el-form-item>
