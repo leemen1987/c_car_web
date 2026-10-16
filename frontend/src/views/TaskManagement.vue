@@ -314,7 +314,6 @@
             <el-form-item label="车辆配置">
               <div style="width:100%">
                 <div v-for="(p, idx) in taskForm.capacityPlan" :key="idx" style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
-                  <span style="width:28px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
                   <el-select v-model="p.vehicle_type" placeholder="核定载人数" style="width:130px" filterable allow-create @change="recalcFuelFee">
                     <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
                   </el-select>
@@ -492,7 +491,7 @@
     <!-- Complete Task Dialog -->
     <el-dialog v-model="completeDialogVisible" :title="isSelfDriveComplete ? '完成任务 - 录入里程' : '完成任务 - 录入实际费用'" :width="isMobile ? '100%' : '500px'" :fullscreen="isMobile">
       <el-form :model="completeForm" :label-width="isMobile ? '100px' : '110px'">
-        <template v-if="isSelfDriveComplete && !currentCompleteTask?.return_time">
+        <template v-if="!currentCompleteTask?.return_time">
         <el-form-item label="回程时间">
           <el-date-picker v-model="completeForm.return_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" placeholder="请选择回程时间" />
         </el-form-item>
@@ -1010,7 +1009,7 @@ const computedRentalDays = computed(() => {
   const dt = taskForm.value.departure_time
   const rt = taskForm.value.return_time
   if (!dt) return '请填写出车时间'
-  if (!rt) return taskForm.value.self_drive ? '待定（回程时填写）' : '请填写回程时间'
+  if (!rt) return '待定（完成时补录）'
   const d = new Date(dt), r = new Date(rt)
   if (r <= d) return '0.5'
   const hours = (r - d) / 3600000
@@ -1114,10 +1113,6 @@ const submitTask = async () => {
   }
   if (!taskForm.value.departure_time) {
     ElMessage.warning('请填写出车时间')
-    return
-  }
-  if (!taskForm.value.self_drive && !taskForm.value.return_time) {
-    ElMessage.warning('请填写回程时间')
     return
   }
   if (new Date(taskForm.value.departure_time) < new Date()) {

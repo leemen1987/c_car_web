@@ -1010,7 +1010,7 @@ def create_task():
     data = request.get_json()
     departure_time = datetime.strptime(data['departure_time'], '%Y-%m-%d %H:%M')
     return_time = datetime.strptime(data['return_time'], '%Y-%m-%d %H:%M') if data.get('return_time') else None
-    rental_days = calc_rental_days(departure_time, return_time)
+    rental_days = calc_rental_days(departure_time, return_time) if return_time else None
     client_type = data.get('client_type', 'personal')
     client_name = data.get('client_name', '')
     client_phone = data.get('client_phone', '')
