@@ -13,6 +13,8 @@
               <el-option label="已完成" value="completed" />
               <el-option label="已取消" value="cancelled" />
             </el-select>
+            <el-date-picker v-model="dateRange" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
+              start-placeholder="开始日期" end-placeholder="结束日期" clearable style="width:240px" />
             <span style="color:#909399;font-size:13px">共 {{ filteredTasks.length }} 条</span>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
@@ -857,6 +859,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMobile))
 
 const tasks = ref([])
 const statusFilter = ref('')
+const dateRange = ref(null)
 const settingsVisible = ref(false)
 const fuelRates = ref([])
 const mileageMultipliers = ref([])
@@ -924,9 +927,24 @@ const saveFuelRates = async () => {
 }
 
 const filteredTasks = computed(() => {
-  if (statusFilter.value === 'all') return tasks.value
-  if (statusFilter.value) return tasks.value.filter(t => t.status === statusFilter.value)
-  return tasks.value.filter(t => t.status !== 'cancelled')
+  let list
+  if (statusFilter.value === 'all') {
+    list = tasks.value
+  } else if (statusFilter.value) {
+    list = tasks.value.filter(t => t.status === statusFilter.value)
+  } else {
+    list = tasks.value.filter(t => t.status !== 'cancelled')
+  }
+  // 按出车日期筛选
+  if (dateRange.value && dateRange.value.length === 2) {
+    const [start, end] = dateRange.value
+    list = list.filter(t => {
+      if (!t.departure_time) return false
+      const d = t.departure_time.slice(0, 10)
+      return d >= start && d <= end
+    })
+  }
+  return list
 })
 const laborRates = ref([])
 const clients = ref([])
