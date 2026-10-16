@@ -1536,8 +1536,8 @@ def build_yzj_approval_body(task, row_id=1):
     # 车牌号和司机：优先使用 task_vehicles（多车），回退到主车辆
     task_vehicles = list(task.task_vehicles) if hasattr(task, 'task_vehicles') else []
     if task_vehicles:
-        plates = [f"{i+1}.{tv.vehicle_plate}" for i, tv in enumerate(task_vehicles) if tv.vehicle_plate]
-        drivers = [f"{i+1}.{tv.driver_name}" for i, tv in enumerate(task_vehicles) if tv.driver_name]
+        plates = [f"{i+1}.{tv.vehicle.plate_number}" for i, tv in enumerate(task_vehicles) if tv.vehicle]
+        drivers = [f"{i+1}.{tv.driver.name}" for i, tv in enumerate(task_vehicles) if tv.driver]
         plate_display = ";".join(plates)
         driver_display = ";".join(drivers)
     else:
