@@ -1023,6 +1023,20 @@ def create_task():
             client_name = contact.name
             client_phone = contact.phone
             client_id = contact.client_id
+
+    # 座位数配置：多车不同座位数
+    capacity_plan = data.get('capacity_plan', [])
+    vehicle_count = data.get('vehicle_count', 1)
+    vehicle_type = data.get('vehicle_type', '')
+    capacity_plan_json = ''
+    if capacity_plan:
+        # 过滤无效行
+        capacity_plan = [p for p in capacity_plan if p.get('vehicle_type') and int(p.get('count', 0) or 0) > 0]
+        if capacity_plan:
+            vehicle_count = sum(int(p['count']) for p in capacity_plan)
+            vehicle_type = '、'.join(f"{p['vehicle_type']}×{p['count']}" for p in capacity_plan)
+            capacity_plan_json = json.dumps(capacity_plan, ensure_ascii=False)
+
     task = Task(
         client_type=client_type,
         client_name=client_name,
@@ -1034,8 +1048,9 @@ def create_task():
         departure_time=departure_time,
         return_time=return_time,
         rental_days=rental_days,
-        vehicle_type=data.get('vehicle_type', ''),
-        vehicle_count=data.get('vehicle_count', 1),
+        vehicle_type=vehicle_type,
+        vehicle_count=vehicle_count,
+        capacity_plan=capacity_plan_json,
         self_drive=data.get('self_drive', False),
         mileage=data.get('mileage', 0),
         rental_fee=data.get('rental_fee', 0),
@@ -1147,6 +1162,15 @@ def update_task(task_id):
             'labor_fee': task.labor_fee,
         }
         task.add_changes(change_list, snapshot)
+
+    # 座位数配置更新
+    if 'capacity_plan' in data:
+        capacity_plan = data.get('capacity_plan', [])
+        capacity_plan = [p for p in capacity_plan if p.get('vehicle_type') and int(p.get('count', 0) or 0) > 0]
+        if capacity_plan:
+            task.capacity_plan = json.dumps(capacity_plan, ensure_ascii=False)
+            task.vehicle_count = sum(int(p['count']) for p in capacity_plan)
+            task.vehicle_type = '、'.join(f"{p['vehicle_type']}×{p['count']}" for p in capacity_plan)
 
     if 'remark' in data:
         task.remark = data['remark']
@@ -2669,6 +2693,7 @@ def init_db():
         ('start_mileage', "FLOAT DEFAULT 0"),
         ('end_mileage', "FLOAT DEFAULT 0"),
         ('vehicle_count', "INT DEFAULT 1"),
+        ('capacity_plan', "TEXT"),
         ('self_drive', "TINYINT DEFAULT 0"),
     ]:
         try:

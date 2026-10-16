@@ -310,16 +310,21 @@
           </el-col>
         </el-row>
         <el-row :gutter="isMobile ? 0 : 20">
-          <el-col :span="isMobile ? 24 : 12">
-            <el-form-item label="核定载人数">
-              <el-select v-model="taskForm.vehicle_type" placeholder="请选择核定载人数" style="width:100%" filterable allow-create @change="onCapacityChange">
-                <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="isMobile ? 24 : 12">
-            <el-form-item label="用车数量">
-              <el-input-number v-model="taskForm.vehicle_count" :min="1" :max="50" style="width:100%" @change="onVehicleCountChange" />
+          <el-col :span="24">
+            <el-form-item label="车辆配置">
+              <div style="width:100%">
+                <div v-for="(p, idx) in taskForm.capacityPlan" :key="idx" style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+                  <span style="width:28px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
+                  <el-select v-model="p.vehicle_type" placeholder="核定载人数" style="flex:1" filterable allow-create @change="recalcFuelFee">
+                    <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
+                  </el-select>
+                  <span style="color:#909399;font-size:13px">× </span>
+                  <el-input-number v-model="p.count" :min="1" :max="20" size="small" style="width:90px" controls-position="right" @change="onVehicleCountChange" />
+                  <el-button v-if="taskForm.capacityPlan.length > 1" type="danger" link size="small" @click="removeCapacityRow(idx)">删除</el-button>
+                </div>
+                <el-button type="primary" size="small" plain @click="addCapacityRow">+ 添加车辆</el-button>
+                <span style="margin-left:12px;color:#909399;font-size:13px">共 {{ totalVehicleCount }} 台车</span>
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -463,7 +468,8 @@
         <!-- 普通排班布局 -->
         <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
           <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
-          <el-select v-model="a.vehicle_id" placeholder="选择车辆" style="flex:1" filterable>
+          <el-tag v-if="a.capacity" size="small" type="warning" style="flex-shrink:0">{{ a.capacity }}</el-tag>
+          <el-select v-model="a.vehicle_id" :placeholder="a.capacity ? '选择' + a.capacity + '车辆' : '选择车辆'" style="flex:1" filterable>
             <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
           </el-select>
           <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
@@ -973,9 +979,24 @@ const canSubmitApproval = (row) => {
 const taskForm = ref({
   client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null,
   departure: '', destination: '', departure_time: '', return_time: '',
-  vehicle_type: '', vehicle_count: 1, self_drive: false, mileage: 0, rental_fee: 0,
+  vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1 }],
+  self_drive: false, mileage: 0, rental_fee: 0,
   fuel_fee: 0, bridge_fee: 0, labor_fee: 0, remark: ''
 })
+
+const totalVehicleCount = computed(() => {
+  return taskForm.value.capacityPlan.reduce((sum, p) => sum + (p.count || 0), 0)
+})
+
+const addCapacityRow = () => {
+  taskForm.value.capacityPlan.push({ vehicle_type: '', count: 1 })
+  onVehicleCountChange()
+}
+
+const removeCapacityRow = (idx) => {
+  taskForm.value.capacityPlan.splice(idx, 1)
+  onVehicleCountChange()
+}
 
 const currentContacts = computed(() => {
   if (!taskForm.value.client_id) return []
@@ -1052,7 +1073,7 @@ const loadTasks = async () => {
 const showAddDialog = () => {
   isEdit.value = false
   editId.value = null
-  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, self_drive: false, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
+  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1 }], self_drive: false, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
   taskDialogVisible.value = true
 }
 
@@ -1060,11 +1081,15 @@ const showEditDialog = (row) => {
   isEdit.value = true
   editId.value = row.id
   const matchedRate = laborRates.value.find(r => r.location === row.destination)
+  const plan = (row.capacity_plan && row.capacity_plan.length)
+    ? row.capacity_plan.map(p => ({ vehicle_type: p.vehicle_type, count: p.count }))
+    : [{ vehicle_type: row.vehicle_type || '', count: row.vehicle_count || 1 }]
   taskForm.value = {
     client_type: row.client_type || 'personal', client_name: row.client_name, client_phone: row.client_phone || '',
     client_id: row.client_id, contact_id: row.contact_id,
     departure: row.departure, destination: row.destination,
     departure_time: row.departure_time, return_time: row.return_time || '', vehicle_type: row.vehicle_type,
+    capacityPlan: plan,
     mileage: row.mileage, rental_fee: row.rental_fee, fuel_fee: row.fuel_fee,
     bridge_fee: row.bridge_fee, labor_rate_id: matchedRate ? matchedRate.id : null, labor_fee: row.labor_fee,
     remark: row.remark || ''
@@ -1102,11 +1127,12 @@ const submitTask = async () => {
     return
   }
   try {
+    const payload = { ...taskForm.value, capacity_plan: taskForm.value.capacityPlan }
     if (isEdit.value) {
-      await api.put(`/tasks/${editId.value}`, taskForm.value)
+      await api.put(`/tasks/${editId.value}`, payload)
       ElMessage.success('更新成功')
     } else {
-      await api.post('/tasks', taskForm.value)
+      await api.post('/tasks', payload)
       ElMessage.success('录入成功')
     }
     taskDialogVisible.value = false
@@ -1119,12 +1145,21 @@ const showScheduleDialog = async (row) => {
   currentScheduleTask.value = row
   scheduleForm.value = { vehicle_id: null, driver_id: null }
   scheduleRemark.value = row.remark || ''
-  
-  // 根据 vehicle_count 初始化分配列表
-  const count = row.vehicle_count || 1
-  scheduleAssignments.value = Array.from({ length: count }, () => ({ vehicle_id: null, driver_id: null }))
-  
-  // 如果已有排班记录，填充
+
+  // 根据座位数组合展开分配槽位：每台车一个槽位，标注所需座位数
+  const plan = (row.capacity_plan && row.capacity_plan.length)
+    ? row.capacity_plan
+    : [{ vehicle_type: row.vehicle_type || '', count: row.vehicle_count || 1 }]
+  const slots = []
+  for (const p of plan) {
+    const c = p.count || 1
+    for (let i = 0; i < c; i++) {
+      slots.push({ vehicle_id: null, driver_id: null, capacity: p.vehicle_type || '' })
+    }
+  }
+  scheduleAssignments.value = slots
+
+  // 如果已有排班记录，按顺序填充
   if (row.task_vehicles && row.task_vehicles.length > 0) {
     row.task_vehicles.forEach((tv, idx) => {
       if (idx < scheduleAssignments.value.length) {
@@ -1133,7 +1168,7 @@ const showScheduleDialog = async (row) => {
       }
     })
   }
-  
+
   try {
     const res = await api.get(`/tasks/${row.id}/available-resources`)
     scheduleInfo.value = { ...res.data, destination: row.destination, labor_fee: row.labor_fee }
@@ -1145,7 +1180,13 @@ const getAvailableVehicles = (currentIdx) => {
   const selectedIds = scheduleAssignments.value
     .map((a, idx) => idx !== currentIdx ? a.vehicle_id : null)
     .filter(Boolean)
-  return scheduleInfo.value.vehicles.filter(v => !selectedIds.includes(v.id))
+  const slotCapacity = scheduleAssignments.value[currentIdx]?.capacity
+  return scheduleInfo.value.vehicles.filter(v => {
+    if (selectedIds.includes(v.id)) return false
+    // 槽位指定座位数时优先匹配相同座位数的车辆
+    if (slotCapacity && v.capacity && v.capacity !== slotCapacity) return false
+    return true
+  })
 }
 
 const getAvailableDrivers = (currentIdx) => {
@@ -1352,15 +1393,17 @@ const getFuelRate = (capacity) => {
 }
 
 const recalcFuelFee = () => {
-  const rate = getFuelRate(taskForm.value.vehicle_type)
   const mileage = taskForm.value.mileage
-  if (rate && mileage > 0) {
-    taskForm.value.fuel_fee = Math.round(rate * mileage * 100) / 100
+  if (mileage <= 0) return
+  const total = taskForm.value.capacityPlan.reduce((s, p) => {
+    const rate = getFuelRate(p.vehicle_type)
+    return s + (rate ? rate * (p.count || 1) : 0)
+  }, 0)
+  if (total > 0) {
+    // mileage 已含总台数倍数，换算回单车里程后乘以加权费率
+    const count = totalVehicleCount.value || 1
+    taskForm.value.fuel_fee = Math.round((mileage / count) * total * 100) / 100
   }
-}
-
-const onCapacityChange = () => {
-  recalcFuelFee()
 }
 
 const onMileageChange = () => {

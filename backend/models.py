@@ -189,6 +189,7 @@ class Task(db.Model):
     vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True)
     driver_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=True)
     vehicle_count = db.Column(db.Integer, default=1)  # 用车数量
+    capacity_plan = db.Column(db.Text, default='')  # 座位数配置 JSON: [{"vehicle_type":"49座","count":1},...]
     self_drive = db.Column(db.Boolean, default=False)  # 是否自驾车
     departure_time = db.Column(db.DateTime, nullable=False)  # 出车时间
     return_time = db.Column(db.DateTime, nullable=True)  # 回程时间
@@ -232,6 +233,19 @@ class Task(db.Model):
     driver = db.relationship('Driver', backref='tasks')
     task_vehicles = db.relationship('TaskVehicle', backref='task', cascade='all,delete-orphan', lazy='dynamic')
 
+    def get_capacity_plan(self):
+        """解析座位数配置，无配置时回退到单一座位数+数量"""
+        try:
+            plan = json.loads(self.capacity_plan) if self.capacity_plan else []
+            if plan:
+                return plan
+        except (json.JSONDecodeError, ValueError):
+            pass
+        # 兼容旧数据：单一 vehicle_type + vehicle_count
+        if self.vehicle_type:
+            return [{'vehicle_type': self.vehicle_type, 'count': self.vehicle_count or 1}]
+        return []
+
     def get_change_log(self):
         try:
             return json.loads(self.change_log) if self.change_log else []
@@ -273,6 +287,7 @@ class Task(db.Model):
             'vehicle_id': self.vehicle_id,
             'driver_id': self.driver_id,
             'vehicle_count': self.vehicle_count or 1,
+            'capacity_plan': self.get_capacity_plan(),
             'self_drive': self.self_drive or False,
             'task_vehicles': [tv.to_dict() for tv in self.task_vehicles] if hasattr(self, 'task_vehicles') else [],
             'vehicle_plate': self.vehicle.plate_number if self.vehicle else None,
