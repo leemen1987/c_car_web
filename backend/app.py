@@ -1144,6 +1144,11 @@ def update_task(task_id):
     if 'departure_time' in data or 'return_time' in data:
         task.rental_days = calc_rental_days(task.departure_time, task.return_time)
 
+    # 重算预计成本和预估利润（费用字段可能被修改）
+    if any(f in data for f in ('rental_fee', 'fuel_fee', 'bridge_fee', 'labor_fee')):
+        task.estimated_cost = (task.fuel_fee or 0) + (task.bridge_fee or 0) + (task.labor_fee or 0)
+        task.estimated_profit = (task.rental_fee or 0) - task.estimated_cost
+
     if change_list:
         # Take snapshot AFTER applying changes
         snapshot = {
