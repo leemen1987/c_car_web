@@ -685,9 +685,15 @@
     </el-dialog>
 
     <!-- Approval Dialog -->
-    <el-dialog v-model="approvalDialogVisible" title="发起云之家审批" :width="isMobile ? '100%' : '800px'" :fullscreen="isMobile">
-      <div style="margin-bottom:12px;color:#909399;font-size:13px">
-        勾选需要发起审批的已排班任务，所有选中任务将合并为一条审批提交。
+    <el-dialog v-model="approvalDialogVisible" title="发起审批" :width="isMobile ? '100%' : '800px'" :fullscreen="isMobile">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <el-radio-group v-model="approvalMethod">
+          <el-radio value="internal">系统审批</el-radio>
+          <el-radio value="yunzhijia">云之家审批</el-radio>
+        </el-radio-group>
+        <span style="color:#909399;font-size:13px">
+          {{ approvalMethod === 'internal' ? '按公司匹配内部审批流程，微信逐级推送' : '发送到云之家审批模板' }}
+        </span>
       </div>
       <el-table :data="schedulableTasks" border stripe style="width:100%"
         @selection-change="onApprovalSelectionChange" max-height="400">
@@ -872,7 +878,9 @@
           </el-option>
         </el-select>
       </div>
-      <el-button type="primary" size="small" plain @click="currentLevels.push({ name: '', user_ids: [] })">+ 添加一级审批</el-button>
+      <el-button size="small" plain @click="addApprovalLevel">
+        <el-icon><Plus /></el-icon><span style="margin-left:2px">添加一级审批</span>
+      </el-button>
 
       <template #footer>
         <el-button @click="approvalSettingsVisible = false">取消</el-button>
@@ -1004,6 +1012,7 @@ const invoiceForm = ref({ invoice_type: '', invoice_no: '', invoice_amount: 0, i
 
 // 云之家审批相关
 const approvalDialogVisible = ref(false)
+const approvalMethod = ref('internal')  // internal | yunzhijia
 const approvalSelectedTasks = ref([])
 const approvalLoading = ref(false)
 const schedulableTasks = computed(() => tasks.value.filter(t => t.status === 'scheduled'))
@@ -1561,9 +1570,23 @@ const submitApproval = async () => {
   }
 
   const taskIds = approvalSelectedTasks.value.map(t => t.id)
+
+  // 云之家审批：限制同公司混合提交
+  if (approvalMethod.value === 'yunzhijia') {
+    const companies = new Set(approvalSelectedTasks.value.map(t => t.vehicle_company || '外单位'))
+    if (companies.size > 1) {
+      ElMessage.warning('不同所属公司的车辆不能混合发起云之家审批，请按公司分别选择')
+      return
+    }
+  }
+
+  const endpoint = approvalMethod.value === 'yunzhijia'
+    ? '/tasks/submit-approval'
+    : '/tasks/submit-internal-approval'
+
   try {
     approvalLoading.value = true
-    const res = await api.post('/tasks/submit-internal-approval', { task_ids: taskIds })
+    const res = await api.post(endpoint, { task_ids: taskIds })
     ElMessage.success(res.msg || '审批已发起')
     approvalDialogVisible.value = false
     loadTasks()
@@ -1586,8 +1609,11 @@ const currentLevels = computed({
     if (approvalSettingsTab.value === 'default') {
       return approvalConfig.value.default.levels
     }
-    const c = approvalConfig.value.companies[approvalSettingsTab.value]
-    return c ? c.levels : []
+    // 切换到公司Tab时确保存在配置条目，否则修改不生效
+    if (!approvalConfig.value.companies[approvalSettingsTab.value]) {
+      approvalConfig.value.companies[approvalSettingsTab.value] = { levels: [] }
+    }
+    return approvalConfig.value.companies[approvalSettingsTab.value].levels
   },
   set: (val) => {
     if (approvalSettingsTab.value === 'default') {
@@ -1600,6 +1626,14 @@ const currentLevels = computed({
     }
   }
 })
+
+const addApprovalLevel = () => {
+  // 确保当前Tab的配置存在后再添加（兼容get创建的条目）
+  if (approvalSettingsTab.value !== 'default' && !approvalConfig.value.companies[approvalSettingsTab.value]) {
+    approvalConfig.value.companies[approvalSettingsTab.value] = { levels: [] }
+  }
+  currentLevels.value.push({ name: '', user_ids: [] })
+}
 
 const moveLevel = (idx, dir) => {
   const arr = currentLevels.value
