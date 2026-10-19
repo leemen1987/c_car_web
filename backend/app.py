@@ -1779,9 +1779,12 @@ def yunzhijia_callback():
                 data = decrypt_yzj_callback(encrypted_content, aes_key) or {}
         except json.JSONDecodeError:
             # 如果不是JSON，可能是直接的加密字符串
-            data = decrypt_yzj_callback(raw_data, aes_key) or {}
+            try:
+                data = decrypt_yzj_callback(raw_data, aes_key) or {}
+            except Exception as e:
+                app.logger.error(f"云之家回调解密失败: {e}")
         except Exception as e:
-            app.logger.error(f"云之 decryption failed: {e}")
+            app.logger.error(f"云之家回调解密失败: {e}")
 
     # 如果解密失败，尝试直接解析
     if not data:
