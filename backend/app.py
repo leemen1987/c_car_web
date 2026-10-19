@@ -3074,6 +3074,10 @@ def init_db():
             value=json.dumps(DEFAULT_APPROVAL_CONFIG, ensure_ascii=False)
         ))
 
+    # 初始化全局审批方式（internal=系统审批 / yunzhijia=云之家审批）
+    if not SystemConfig.query.get('approval_method'):
+        db.session.add(SystemConfig(key='approval_method', value='internal'))
+
     # 为已有任务生成任务编号
     tasks_without_no = Task.query.filter((Task.task_no == '') | (Task.task_no.is_(None))).all()
     for t in tasks_without_no:

@@ -687,12 +687,12 @@
     <!-- Approval Dialog -->
     <el-dialog v-model="approvalDialogVisible" title="发起审批" :width="isMobile ? '100%' : '800px'" :fullscreen="isMobile">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <el-radio-group v-model="approvalMethod">
-          <el-radio value="internal">系统审批</el-radio>
-          <el-radio value="yunzhijia">云之家审批</el-radio>
-        </el-radio-group>
+        <el-tag :type="approvalMethod === 'internal' ? 'success' : 'warning'" size="large">
+          当前审批方式：{{ approvalMethod === 'internal' ? '系统审批' : '云之家审批' }}
+        </el-tag>
         <span style="color:#909399;font-size:13px">
           {{ approvalMethod === 'internal' ? '按公司匹配内部审批流程，微信逐级推送' : '发送到云之家审批模板' }}
+          <template v-if="user.role === 'admin'">（切换请在审批设置中配置）</template>
         </span>
       </div>
       <el-table :data="schedulableTasks" border stripe style="width:100%"
@@ -851,6 +851,16 @@
 
     <!-- 审批流程设置弹窗 -->
     <el-dialog v-model="approvalSettingsVisible" title="审批流程设置" width="780px" top="5vh">
+      <!-- 全局审批方式（超管配置） -->
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;margin-bottom:14px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+        <span style="font-size:13px;color:#606266;flex-shrink:0">全局审批方式：</span>
+        <el-radio-group v-model="approvalMethodConfig">
+          <el-radio value="internal">系统审批</el-radio>
+          <el-radio value="yunzhijia">云之家审批</el-radio>
+        </el-radio-group>
+        <span style="color:#909399;font-size:12px">（发起审批时按此方式提交，普通用户不可切换）</span>
+      </div>
+
       <el-tabs v-model="approvalSettingsTab">
         <el-tab-pane label="默认流程" name="default" />
         <el-tab-pane v-for="c in approvalCompanies" :key="c.name" :label="c.name" :name="c.name" />
@@ -1554,9 +1564,16 @@ const onDepartureTimeChange = () => {
 }
 
 // 云之家审批
-const showApprovalDialog = () => {
+const showApprovalDialog = async () => {
   approvalSelectedTasks.value = []
   approvalDialogVisible.value = true
+  // 加载全局审批方式（仅超管可配置，此处只读展示）
+  try {
+    const res = await api.get('/system-config/approval_method')
+    approvalMethod.value = (res.code === 200 && res.data) ? res.data : 'internal'
+  } catch (e) {
+    approvalMethod.value = 'internal'
+  }
 }
 
 const onApprovalSelectionChange = (selection) => {
@@ -1600,6 +1617,7 @@ const submitApproval = async () => {
 // ===== 审批流程设置 =====
 const approvalSettingsVisible = ref(false)
 const approvalSettingsTab = ref('default')
+const approvalMethodConfig = ref('internal')  // 全局审批方式（仅超管配置）
 const approvalConfig = ref({ default: { levels: [] }, companies: {} })
 const allUsers = ref([])
 const approvalCompanies = ref([])
@@ -1649,8 +1667,9 @@ const showApprovalSettings = async () => {
   approvalSettingsVisible.value = true
   try {
     // 拉取现有配置
-    const [cfgRes, usersRes, compRes] = await Promise.all([
+    const [cfgRes, methodRes, usersRes, compRes] = await Promise.all([
       api.get('/system-config/approval_config'),
+      api.get('/system-config/approval_method'),
       api.get('/users'),
       api.get('/vehicle-companies')
     ])
@@ -1662,6 +1681,7 @@ const showApprovalSettings = async () => {
         companies: {}
       }
     }
+    approvalMethodConfig.value = (methodRes.code === 200 && methodRes.data) ? methodRes.data : 'internal'
     allUsers.value = usersRes.code === 200 ? usersRes.data : []
     approvalCompanies.value = compRes.code === 200 ? compRes.data.map(c => ({ name: c.name })) : []
   } catch (e) {}
@@ -1670,6 +1690,7 @@ const showApprovalSettings = async () => {
 const saveApprovalSettings = async () => {
   try {
     await api.put('/system-config/approval_config', { value: approvalConfig.value })
+    await api.put('/system-config/approval_method', { value: approvalMethodConfig.value })
     ElMessage.success('审批流程配置已保存')
     approvalSettingsVisible.value = false
   } catch (e) {}
