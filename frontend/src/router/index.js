@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   { path: '/login', name: 'Login', component: () => import('../views/Login.vue') },
   { path: '/confirm/:token', name: 'ConfirmSchedule', component: () => import('../views/ConfirmSchedule.vue') },
+  { path: '/approval/:token', name: 'Approval', component: () => import('../views/ApprovalPage.vue') },
   {
     path: '/',
     component: () => import('../views/Layout.vue'),
@@ -28,7 +29,7 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   // 公开页面：登录页、确认页
-  const publicPages = ['/login', '/confirm']
+  const publicPages = ['/login', '/confirm', '/approval']
   const isPublicPage = publicPages.some(page => to.path.startsWith(page))
 
   if (!isPublicPage) {

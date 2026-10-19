@@ -20,6 +20,7 @@
           <div style="display:flex;gap:8px;align-items:center">
             <el-button type="success" @click="showApprovalDialog">发起审批</el-button>
             <el-button type="primary" @click="showAddDialog">录入任务</el-button>
+            <el-button v-if="user.role === 'admin'" @click="showApprovalSettings"><el-icon><SetUp /></el-icon><span style="margin-left:4px">审批设置</span></el-button>
             <el-button v-if="user.role === 'admin'" @click="showSettings"><el-icon><Setting /></el-icon><span style="margin-left:4px">费率</span></el-button>
           </div>
         </div>
@@ -841,6 +842,43 @@
         <el-button type="primary" @click="saveFuelRates">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 审批流程设置弹窗 -->
+    <el-dialog v-model="approvalSettingsVisible" title="审批流程设置" width="780px" top="5vh">
+      <el-tabs v-model="approvalSettingsTab">
+        <el-tab-pane label="默认流程" name="default" />
+        <el-tab-pane v-for="c in approvalCompanies" :key="c.name" :label="c.name" :name="c.name" />
+      </el-tabs>
+      <div style="color:#909399;font-size:12px;margin-bottom:12px">
+        未配置的公司自动使用"默认流程"。审批人需在顶栏设置中绑定企业微信 UserID 才能收到推送。
+      </div>
+
+      <!-- 层级配置 -->
+      <div v-for="(lv, idx) in currentLevels" :key="idx" style="padding:12px;margin-bottom:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <el-tag size="small" type="warning">第{{ idx + 1 }}级</el-tag>
+          <el-input v-model="lv.name" placeholder="级别名称（如：部门负责人）" style="width:200px" size="small" />
+          <div style="margin-left:auto;display:flex;gap:4px">
+            <el-button size="small" :disabled="idx === 0" @click="moveLevel(idx, -1)">↑</el-button>
+            <el-button size="small" :disabled="idx === currentLevels.length - 1" @click="moveLevel(idx, 1)">↓</el-button>
+            <el-button type="danger" size="small" plain :disabled="currentLevels.length <= 1" @click="currentLevels.splice(idx, 1)">删除</el-button>
+          </div>
+        </div>
+        <el-select v-model="lv.user_ids" multiple filterable placeholder="选择审批人（可多选）" style="width:100%" size="small">
+          <el-option v-for="u in allUsers" :key="u.id" :label="u.username" :value="u.id">
+            <span>{{ u.username }}</span>
+            <el-tag v-if="u.wx_sender" type="success" size="small" style="margin-left:8px">已绑定</el-tag>
+            <el-tag v-else type="danger" size="small" style="margin-left:8px">未绑定UserID</el-tag>
+          </el-option>
+        </el-select>
+      </div>
+      <el-button type="primary" size="small" plain @click="currentLevels.push({ name: '', user_ids: [] })">+ 添加一级审批</el-button>
+
+      <template #footer>
+        <el-button @click="approvalSettingsVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveApprovalSettings">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -1522,17 +1560,10 @@ const submitApproval = async () => {
     return
   }
 
-  // 检查是否混合了不同所属公司的车辆
-  const companies = new Set(approvalSelectedTasks.value.map(t => t.vehicle_company || '外单位'))
-  if (companies.size > 1) {
-    ElMessage.warning('不同所属公司的车辆不能混合发起审批，请按公司分别选择')
-    return
-  }
-
   const taskIds = approvalSelectedTasks.value.map(t => t.id)
   try {
     approvalLoading.value = true
-    const res = await api.post('/tasks/submit-approval', { task_ids: taskIds })
+    const res = await api.post('/tasks/submit-internal-approval', { task_ids: taskIds })
     ElMessage.success(res.msg || '审批已发起')
     approvalDialogVisible.value = false
     loadTasks()
@@ -1541,6 +1572,73 @@ const submitApproval = async () => {
   } finally {
     approvalLoading.value = false
   }
+}
+
+// ===== 审批流程设置 =====
+const approvalSettingsVisible = ref(false)
+const approvalSettingsTab = ref('default')
+const approvalConfig = ref({ default: { levels: [] }, companies: {} })
+const allUsers = ref([])
+const approvalCompanies = ref([])
+
+const currentLevels = computed({
+  get: () => {
+    if (approvalSettingsTab.value === 'default') {
+      return approvalConfig.value.default.levels
+    }
+    const c = approvalConfig.value.companies[approvalSettingsTab.value]
+    return c ? c.levels : []
+  },
+  set: (val) => {
+    if (approvalSettingsTab.value === 'default') {
+      approvalConfig.value.default.levels = val
+    } else {
+      if (!approvalConfig.value.companies[approvalSettingsTab.value]) {
+        approvalConfig.value.companies[approvalSettingsTab.value] = { levels: [] }
+      }
+      approvalConfig.value.companies[approvalSettingsTab.value].levels = val
+    }
+  }
+})
+
+const moveLevel = (idx, dir) => {
+  const arr = currentLevels.value
+  const target = idx + dir
+  if (target < 0 || target >= arr.length) return
+  const tmp = arr[idx]
+  arr[idx] = arr[target]
+  arr[target] = tmp
+}
+
+const showApprovalSettings = async () => {
+  approvalSettingsTab.value = 'default'
+  approvalSettingsVisible.value = true
+  try {
+    // 拉取现有配置
+    const [cfgRes, usersRes, compRes] = await Promise.all([
+      api.get('/system-config/approval_config'),
+      api.get('/users'),
+      api.get('/vehicle-companies')
+    ])
+    if (cfgRes.code === 200 && cfgRes.data) {
+      approvalConfig.value = JSON.parse(cfgRes.data)
+    } else {
+      approvalConfig.value = {
+        default: { levels: [{ name: '部门负责人', user_ids: [] }, { name: '车队负责人', user_ids: [] }, { name: '分管经理', user_ids: [] }] },
+        companies: {}
+      }
+    }
+    allUsers.value = usersRes.code === 200 ? usersRes.data : []
+    approvalCompanies.value = compRes.code === 200 ? compRes.data.map(c => ({ name: c.name })) : []
+  } catch (e) {}
+}
+
+const saveApprovalSettings = async () => {
+  try {
+    await api.put('/system-config/approval_config', { value: approvalConfig.value })
+    ElMessage.success('审批流程配置已保存')
+    approvalSettingsVisible.value = false
+  } catch (e) {}
 }
 
 // 排班确认相关

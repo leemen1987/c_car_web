@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, session, redirect
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
-from models import db, User, Driver, Vehicle, VehicleCompany, Task, TaskVehicle, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot, LongRentalContract, LongRentalBill, SystemConfig
+from models import db, User, Driver, Vehicle, VehicleCompany, Task, TaskVehicle, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot, LongRentalContract, LongRentalBill, SystemConfig, ApprovalFlow, ApprovalStep
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, date
 from functools import wraps
@@ -2600,6 +2600,303 @@ def delete_confirmation(confirmation_id):
     return jsonify({'code': 200, 'msg': '删除成功'})
 
 
+# ==================== Internal Approval ====================
+
+DEFAULT_APPROVAL_CONFIG = {
+    'default': {'levels': [
+        {'name': '部门负责人', 'user_ids': []},
+        {'name': '车队负责人', 'user_ids': []},
+        {'name': '分管经理', 'user_ids': []},
+    ]},
+    'companies': {}
+}
+
+
+def get_approval_config():
+    """读取审批流程配置"""
+    raw = SystemConfig.get('approval_config')
+    if raw:
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return DEFAULT_APPROVAL_CONFIG
+
+
+def resolve_flow_levels(task):
+    """按任务车辆所属公司匹配审批流程，无匹配用默认流程"""
+    config = get_approval_config()
+    company = (task.vehicle.company or '').strip() if task.vehicle else ''
+    levels = []
+    if company and company in config.get('companies', {}):
+        levels = config['companies'][company].get('levels', [])
+    if not levels:
+        levels = config.get('default', {}).get('levels', [])
+    return [l for l in levels if l.get('name') and l.get('user_ids')]
+
+
+def send_approval_card(step, task, level_name):
+    """向审批人推送企业微信审批卡片"""
+    approver = User.query.get(step.approver_user_id)
+    if not approver or not approver.wx_sender:
+        app.logger.warning(f"审批推送跳过: step={step.id}, 用户未配置UserID")
+        step.push_status = 'failed'
+        step.push_error = '审批人未配置企业微信UserID'
+        return
+
+    approval_url = f"{app.config.get('CONFIRM_BASE_URL', '')}/approval/{step.token}"
+    title = f"包车审批 - {task.departure or ''}→{task.destination or ''}"
+    description = (
+        f"任务编号：{task.task_no or ''}\n"
+        f"级别：{level_name}（第{step.level}级）\n"
+        f"租车费：¥{task.rental_fee or 0} | 预估利润：¥{task.estimated_profit or 0}\n"
+        f"出车时间：{task.departure_time.strftime('%Y-%m-%d %H:%M') if task.departure_time else ''}"
+    )
+    try:
+        client = get_wx_work_client()
+        result = client.send_textcard_message(
+            userid=approver.wx_sender,
+            title=title,
+            description=description,
+            url=approval_url,
+            btntxt='去审批'
+        )
+        if result.get('success'):
+            step.push_status = 'success'
+        else:
+            step.push_status = 'failed'
+            step.push_error = result.get('errmsg', '发送失败')
+    except Exception as e:
+        step.push_status = 'failed'
+        step.push_error = str(e)
+
+
+@app.route('/api/tasks/submit-internal-approval', methods=['POST'])
+@login_required
+def submit_internal_approval():
+    """发起内部审批（替代云之家），按公司匹配流程，逐级推送"""
+    data = request.get_json()
+    task_ids = data.get('task_ids', [])
+    if not task_ids:
+        return jsonify({'code': 400, 'msg': '请选择至少一个任务'})
+
+    tasks = Task.query.filter(Task.id.in_(task_ids)).all()
+    if not tasks:
+        return jsonify({'code': 404, 'msg': '未找到任务'})
+
+    eligible = [t for t in tasks if t.status == 'scheduled']
+    if not eligible:
+        return jsonify({'code': 400, 'msg': '所选任务中没有已排班的任务'})
+
+    # 过滤已过出车时间、已有进行中/已通过审批的
+    now = datetime.now()
+    skipped = []
+    to_submit = []
+    for t in eligible:
+        if t.departure_time and t.departure_time <= now:
+            skipped.append(f"{t.task_no}(已过出车时间)")
+            continue
+        if t.yzj_approval_status in ('submitted', 'approved'):
+            skipped.append(f"{t.task_no}(审批中/已通过)")
+            continue
+        to_submit.append(t)
+
+    if not to_submit:
+        return jsonify({'code': 400, 'msg': '没有可发起审批的任务。' + ('；'.join(skipped) if skipped else '')})
+
+    results = []
+    for t in to_submit:
+        levels = resolve_flow_levels(t)
+        if not levels:
+            results.append({'task_no': t.task_no, 'ok': False, 'msg': '未配置审批流程'})
+            continue
+
+        # 清除旧的审批记录
+        old_flow = ApprovalFlow.query.filter_by(task_id=t.id).first()
+        if old_flow:
+            db.session.delete(old_flow)
+            db.session.flush()
+
+        flow = ApprovalFlow(
+            task_id=t.id,
+            status='pending',
+            current_level=1,
+            total_levels=len(levels)
+        )
+        db.session.add(flow)
+        db.session.flush()
+
+        # 生成内部流水号
+        serial = f"NB-{datetime.now().strftime('%Y%m%d')}-{flow.id:04d}"
+
+        first_step = None
+        for lv in levels:
+            level_idx = levels.index(lv) + 1
+            # 每级推送给配置的所有人，先操作者生效 —— 记录第一条为主步骤
+            for uid in lv['user_ids']:
+                step = ApprovalStep(
+                    flow_id=flow.id,
+                    level=level_idx,
+                    level_name=lv['name'],
+                    approver_user_id=uid,
+                    token=uuid.uuid4().hex if level_idx == 1 else None,
+                    status='pending'
+                )
+                db.session.add(step)
+                db.session.flush()
+                if level_idx == 1 and first_step is None:
+                    first_step = step
+
+        t.yzj_approval_status = 'submitted'
+        t.yzj_serial = serial
+
+        # 推送第1级
+        if first_step:
+            send_approval_card(first_step, t, first_step.level_name)
+            db.session.flush()
+
+        results.append({'task_no': t.task_no, 'ok': True, 'msg': f'已发起（{len(levels)}级审批）'})
+
+    db.session.commit()
+
+    ok_count = sum(1 for r in results if r['ok'])
+    msg = f"成功发起 {ok_count} 条审批"
+    if skipped:
+        msg += f"；跳过 {len(skipped)} 条：{'；'.join(skipped)}"
+    fail = [r['msg'] for r in results if not r['ok']]
+    if fail:
+        msg += f"；失败：{'；'.join(fail)}"
+    return jsonify({'code': 200, 'msg': msg})
+
+
+@app.route('/api/approval/<token>', methods=['GET'])
+def approval_page_data(token):
+    """免登录：审批页数据"""
+    step = ApprovalStep.query.filter_by(token=token).first()
+    if not step:
+        return jsonify({'code': 404, 'msg': '链接无效或已失效'})
+
+    flow = step.flow
+    task = flow.task
+
+    # 收集各级步骤状态（每级可能多人，取该级最早已处理的状态）
+    steps_by_level = {}
+    for s in flow.steps:
+        steps_by_level.setdefault(s.level, []).append(s)
+
+    levels_progress = []
+    for lv in range(1, flow.total_levels + 1):
+        lv_steps = steps_by_level.get(lv, [])
+        lv_status = 'pending'
+        lv_comment = ''
+        acted_at = None
+        for s in sorted(lv_steps, key=lambda x: x.id):
+            if s.status != 'pending':
+                lv_status = s.status
+                lv_comment = s.comment or ''
+                acted_at = s.acted_at.strftime('%Y-%m-%d %H:%M') if s.acted_at else None
+        levels_progress.append({
+            'level': lv,
+            'name': lv_steps[0].level_name if lv_steps else '',
+            'status': lv_status,
+            'comment': lv_comment,
+            'acted_at': acted_at
+        })
+
+    return jsonify({
+        'code': 200,
+        'data': {
+            'task': {
+                'task_no': task.task_no or '',
+                'client_name': task.client_name or '',
+                'client_phone': task.client_phone or '',
+                'departure': task.departure or '',
+                'destination': task.destination or '',
+                'departure_time': task.departure_time.strftime('%Y-%m-%d %H:%M') if task.departure_time else '',
+                'return_time': task.return_time.strftime('%Y-%m-%d %H:%M') if task.return_time else '',
+                'vehicle_type': task.vehicle_type or '',
+                'rental_fee': task.rental_fee or 0,
+                'fuel_fee': task.fuel_fee or 0,
+                'bridge_fee': task.bridge_fee or 0,
+                'labor_fee': task.labor_fee or 0,
+                'estimated_profit': task.estimated_profit or 0,
+                'self_drive': task.self_drive or False
+            },
+            'flow_status': flow.status,
+            'current_level': flow.current_level,
+            'total_levels': flow.total_levels,
+            'levels': levels_progress,
+            'my_step': {
+                'level': step.level,
+                'level_name': step.level_name,
+                'status': step.status
+            }
+        }
+    })
+
+
+@app.route('/api/approval/<token>/act', methods=['POST'])
+def approval_act(token):
+    """免登录：审批操作（通过/拒绝）"""
+    step = ApprovalStep.query.filter_by(token=token).first()
+    if not step:
+        return jsonify({'code': 404, 'msg': '链接无效或已失效'})
+    if step.status != 'pending':
+        return jsonify({'code': 400, 'msg': '该步骤已处理'})
+
+    flow = step.flow
+    task = flow.task
+    if flow.status != 'pending':
+        return jsonify({'code': 400, 'msg': '该审批流程已结束'})
+
+    data = request.get_json() or {}
+    action = data.get('action', '')
+    comment = (data.get('comment') or '').strip()
+
+    if action not in ('approve', 'reject'):
+        return jsonify({'code': 400, 'msg': '无效操作'})
+
+    step.status = 'approved' if action == 'approve' else 'rejected'
+    step.comment = comment
+    step.acted_at = datetime.now()
+
+    if action == 'reject':
+        flow.status = 'rejected'
+        task.yzj_approval_status = 'rejected'
+        db.session.commit()
+        return jsonify({'code': 200, 'msg': '已拒绝'})
+
+    # 通过：标记同级其他 pending 步骤为已由他人处理
+    siblings = ApprovalStep.query.filter(
+        ApprovalStep.flow_id == flow.id,
+        ApprovalStep.level == step.level,
+        ApprovalStep.id != step.id,
+        ApprovalStep.status == 'pending'
+    ).all()
+    for s in siblings:
+        s.status = 'approved'
+        s.comment = '同级其他审批人已处理'
+        s.acted_at = datetime.now()
+
+    if step.level >= flow.total_levels:
+        flow.status = 'approved'
+        task.yzj_approval_status = 'approved'
+        db.session.commit()
+        return jsonify({'code': 200, 'msg': '已通过，全部审批完成'})
+
+    # 推进到下一级
+    next_level = step.level + 1
+    flow.current_level = next_level
+    next_steps = ApprovalStep.query.filter_by(flow_id=flow.id, level=next_level, status='pending').all()
+    for ns in next_steps:
+        ns.token = uuid.uuid4().hex
+        send_approval_card(ns, task, ns.level_name)
+
+    db.session.commit()
+    next_name = next_steps[0].level_name if next_steps else f'第{next_level}级'
+    return jsonify({'code': 200, 'msg': f'已通过，等待{next_name}审批'})
+
+
 # ==================== Init DB ====================
 
 @app.route('/api/init-db', methods=['POST'])
@@ -2769,6 +3066,13 @@ def init_db():
     ], ensure_ascii=False)
     if not SystemConfig.query.get('fuel_rates'):
         db.session.add(SystemConfig(key='fuel_rates', value=default_fuel_rates))
+
+    # 初始化内部审批流程默认配置
+    if not SystemConfig.query.get('approval_config'):
+        db.session.add(SystemConfig(
+            key='approval_config',
+            value=json.dumps(DEFAULT_APPROVAL_CONFIG, ensure_ascii=False)
+        ))
 
     # 为已有任务生成任务编号
     tasks_without_no = Task.query.filter((Task.task_no == '') | (Task.task_no.is_(None))).all()

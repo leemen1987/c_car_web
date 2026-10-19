@@ -558,3 +558,61 @@ class SystemConfig(db.Model):
             cfg = SystemConfig(key=key, value=value)
             db.session.add(cfg)
         db.session.commit()
+
+
+class ApprovalFlow(db.Model):
+    """内部审批流程实例"""
+    __tablename__ = 'approval_flows'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), unique=True, nullable=False)
+    status = db.Column(db.String(20), default='pending')  # pending/approved/rejected
+    current_level = db.Column(db.Integer, default=1)
+    total_levels = db.Column(db.Integer, default=1)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    task = db.relationship('Task', backref='approval_flow')
+    steps = db.relationship('ApprovalStep', backref='flow', order_by='ApprovalStep.level', cascade='all,delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'task_id': self.task_id,
+            'status': self.status,
+            'current_level': self.current_level,
+            'total_levels': self.total_levels,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'steps': [s.to_dict() for s in self.steps]
+        }
+
+
+class ApprovalStep(db.Model):
+    """审批步骤（每级一条）"""
+    __tablename__ = 'approval_steps'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    flow_id = db.Column(db.Integer, db.ForeignKey('approval_flows.id'), nullable=False)
+    level = db.Column(db.Integer, nullable=False)
+    level_name = db.Column(db.String(50), default='')
+    approver_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    token = db.Column(db.String(64), unique=True, nullable=True)
+    status = db.Column(db.String(20), default='pending')  # pending/approved/rejected
+    comment = db.Column(db.Text, default='')
+    acted_at = db.Column(db.DateTime, nullable=True)
+    push_status = db.Column(db.String(20), default='')  # pending/success/failed
+    push_error = db.Column(db.String(255), default='')
+
+    approver = db.relationship('User')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'flow_id': self.flow_id,
+            'level': self.level,
+            'level_name': self.level_name,
+            'approver_user_id': self.approver_user_id,
+            'approver_name': self.approver.username if self.approver else '',
+            'status': self.status,
+            'comment': self.comment or '',
+            'acted_at': self.acted_at.strftime('%Y-%m-%d %H:%M') if self.acted_at else None,
+            'push_status': self.push_status
+        }
