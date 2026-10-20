@@ -1270,12 +1270,8 @@ def get_available_resources(task_id):
         ~Vehicle.id.in_(busy_vehicle_ids) if busy_vehicle_ids else True
     ).all()
 
-    # Get available drivers
-    available_drivers_query = Driver.query.filter(
-        Driver.status != 'inactive',
-        ~Driver.id.in_(busy_driver_ids) if busy_driver_ids else True
-    )
-    available_drivers = available_drivers_query.all()
+    # Get available drivers（出车中司机不排除，仅标记）
+    available_drivers = Driver.query.filter(Driver.status != 'inactive').all()
 
     # Calculate settlement period labor fee for each driver
     settlement_start, settlement_end = get_settlement_range()
@@ -1313,7 +1309,8 @@ def get_available_resources(task_id):
             'vehicles': [v.to_dict() for v in available_vehicles],
             'drivers': [{
                 **d.to_dict(),
-                'total_labor_fee': driver_fees.get(d.id, 0)
+                'total_labor_fee': driver_fees.get(d.id, 0),
+                'is_busy': d.id in busy_driver_ids
             } for d in sorted_drivers],
             'task_start': task_start.strftime('%Y-%m-%d %H:%M'),
             'task_end': task_end.strftime('%Y-%m-%d %H:%M'),
@@ -1358,10 +1355,11 @@ def schedule_task(task_id):
         if not is_self_drive and not did:
             return jsonify({'code': 400, 'msg': '请选择司机'})
 
+        # 仅检测车辆时间冲突（出车中司机允许重复安排）
         conflict_tasks = Task.query.filter(
             Task.id != task_id,
             Task.status.in_(['scheduled']),
-            (Task.vehicle_id == vid) | (Task.driver_id == did) if did else (Task.vehicle_id == vid)
+            Task.vehicle_id == vid
         ).all()
 
         for ct in conflict_tasks:
@@ -1369,8 +1367,7 @@ def schedule_task(task_id):
             ct_end = ct_start + timedelta(days=ct.rental_days)
             if task_start < ct_end and task_end > ct_start:
                 vehicle = Vehicle.query.get(vid)
-                driver = Driver.query.get(did) if did else None
-                return jsonify({'code': 400, 'msg': f'{vehicle.plate_number if vehicle else ""} 或 {driver.name if driver else ""} 在此时间段已被安排'})
+                return jsonify({'code': 400, 'msg': f'{vehicle.plate_number if vehicle else ""} 在此时间段已被安排'})
 
     # 清除旧的车辆分配
     TaskVehicle.query.filter_by(task_id=task_id).delete()

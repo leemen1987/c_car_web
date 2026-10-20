@@ -490,7 +490,10 @@
             <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
           </el-select>
           <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
-            <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id" />
+            <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id">
+              <span>{{ d.name }} ({{ d.phone }}) ¥{{ d.total_labor_fee }}</span>
+              <el-tag v-if="d.is_busy" type="warning" size="small" style="margin-left:6px">出车中</el-tag>
+            </el-option>
           </el-select>
         </div>
         <el-form-item label="备注" style="margin-top:12px">
