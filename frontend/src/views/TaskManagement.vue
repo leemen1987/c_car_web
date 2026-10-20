@@ -350,7 +350,7 @@
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="出车时间">
-              <el-date-picker v-model="taskForm.departure_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" :disabled-date="isEdit ? undefined : disablePastDates" @change="onDepartureTimeChange" />
+              <el-date-picker v-model="taskForm.departure_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" style="width:100%" @change="onDepartureTimeChange" />
             </el-form-item>
           </el-col>
           <el-col :span="isMobile ? 24 : 12">
@@ -1247,10 +1247,6 @@ const submitTask = async () => {
   }
   if (!taskForm.value.departure_time) {
     ElMessage.warning('请填写出车时间')
-    return
-  }
-  if (!isEdit.value && new Date(taskForm.value.departure_time) < new Date()) {
-    ElMessage.warning('出车时间不能选择过去的时间')
     return
   }
   if (taskForm.value.return_time && new Date(taskForm.value.return_time) < new Date(taskForm.value.departure_time)) {
