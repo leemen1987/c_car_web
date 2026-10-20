@@ -464,19 +464,7 @@
 
         <el-divider content-position="left">{{ currentScheduleTask?.self_drive ? '车辆分配' : '车辆分配（' + scheduleAssignments.length + '台）' }}</el-divider>
 
-        <template v-if="currentScheduleTask?.external_vehicle">
-        <!-- 外部车辆排班：仅填外部车牌 -->
-        <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
-          <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
-          <el-tag v-if="a.capacity" size="small" type="warning" style="flex-shrink:0">{{ a.capacity }}</el-tag>
-          <el-input v-model="a.external_plate" :placeholder="a.capacity ? a.capacity + ' 外部车牌' : '外部车牌'" style="flex:1" />
-        </div>
-        <el-form-item label="备注" style="margin-top:12px">
-          <el-input v-model="scheduleRemark" type="textarea" :rows="2" placeholder="选填" />
-        </el-form-item>
-        </template>
-
-        <template v-else-if="currentScheduleTask?.self_drive">
+        <template v-if="currentScheduleTask?.self_drive">
         <!-- 自驾车排班布局 -->
         <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="margin-bottom:16px;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
           <el-form-item label="选择车辆" style="margin-bottom:8px">
@@ -1281,7 +1269,7 @@ const showScheduleDialog = async (row) => {
   for (const p of plan) {
     const c = p.count || 1
     for (let i = 0; i < c; i++) {
-      slots.push({ vehicle_id: null, driver_id: null, external_plate: '', capacity: p.vehicle_type || '' })
+      slots.push({ vehicle_id: null, driver_id: null, capacity: p.vehicle_type || '' })
     }
   }
   scheduleAssignments.value = slots
@@ -1292,7 +1280,6 @@ const showScheduleDialog = async (row) => {
       if (idx < scheduleAssignments.value.length) {
         scheduleAssignments.value[idx].vehicle_id = tv.vehicle_id
         scheduleAssignments.value[idx].driver_id = tv.driver_id
-        scheduleAssignments.value[idx].external_plate = tv.external_plate || ''
       }
     })
   }
@@ -1304,13 +1291,19 @@ const showScheduleDialog = async (row) => {
   } catch (e) {}
 }
 
+const INTERNAL_COMPANIES = ['大众司', '国开司', '国顺司']
+
 const getAvailableVehicles = (currentIdx) => {
   const selectedIds = scheduleAssignments.value
     .map((a, idx) => idx !== currentIdx ? a.vehicle_id : null)
     .filter(Boolean)
   const slotCapacity = scheduleAssignments.value[currentIdx]?.capacity
+  const isExt = currentScheduleTask.value?.external_vehicle
   return scheduleInfo.value.vehicles.filter(v => {
     if (selectedIds.includes(v.id)) return false
+    // 内外部车辆严格区分：外部任务只显示外部公司车辆，内部任务只显示三大公司车辆
+    const co = (v.company || '').trim()
+    if (isExt ? INTERNAL_COMPANIES.includes(co) : !INTERNAL_COMPANIES.includes(co)) return false
     // 槽位指定座位数时优先匹配相同座位数的车辆
     if (slotCapacity && v.capacity && v.capacity !== slotCapacity) return false
     return true
@@ -1326,24 +1319,16 @@ const getAvailableDrivers = (currentIdx) => {
 
 const submitSchedule = async () => {
   const isSelfDrive = currentScheduleTask.value?.self_drive
-  const isExternal = currentScheduleTask.value?.external_vehicle
-  // 验证所有分配都已填写
+  // 验证所有分配都已填写（外部车辆同样需要选择车辆和司机）
   for (let i = 0; i < scheduleAssignments.value.length; i++) {
     const a = scheduleAssignments.value[i]
-    if (isExternal) {
-      if (!(a.external_plate || '').trim()) {
-        ElMessage.warning(`请填写第${i + 1}台外部车牌`)
-        return
-      }
-    } else {
-      if (!a.vehicle_id) {
-        ElMessage.warning(`请为第${i + 1}台车选择车辆`)
-        return
-      }
-      if (!isSelfDrive && !a.driver_id) {
-        ElMessage.warning(`请为第${i + 1}台车选择司机`)
-        return
-      }
+    if (!a.vehicle_id) {
+      ElMessage.warning(`请为第${i + 1}台车选择车辆`)
+      return
+    }
+    if (!isSelfDrive && !a.driver_id) {
+      ElMessage.warning(`请为第${i + 1}台车选择司机`)
+      return
     }
   }
   try {

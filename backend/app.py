@@ -1348,35 +1348,29 @@ def schedule_task(task_id):
     task_start = task.departure_time
     task_end = task_start + timedelta(days=task.rental_days)
     is_self_drive = task.self_drive or False
-    is_external = task.external_vehicle or False
 
-    if is_external:
-        # 外部车辆：只需填写外部车牌
-        for i, a in enumerate(assignments):
-            if not (a.get('external_plate') or '').strip():
-                return jsonify({'code': 400, 'msg': f'请填写第{i + 1}台外部车牌'})
-    else:
-        for a in assignments:
-            vid = a.get('vehicle_id')
-            did = a.get('driver_id')
-            if not vid:
-                return jsonify({'code': 400, 'msg': '请选择车辆'})
-            if not is_self_drive and not did:
-                return jsonify({'code': 400, 'msg': '请选择司机'})
+    # 外部车辆同样选择车辆和司机，走统一逻辑
+    for a in assignments:
+        vid = a.get('vehicle_id')
+        did = a.get('driver_id')
+        if not vid:
+            return jsonify({'code': 400, 'msg': '请选择车辆'})
+        if not is_self_drive and not did:
+            return jsonify({'code': 400, 'msg': '请选择司机'})
 
-            conflict_tasks = Task.query.filter(
-                Task.id != task_id,
-                Task.status.in_(['scheduled']),
-                (Task.vehicle_id == vid) | (Task.driver_id == did) if did else (Task.vehicle_id == vid)
-            ).all()
+        conflict_tasks = Task.query.filter(
+            Task.id != task_id,
+            Task.status.in_(['scheduled']),
+            (Task.vehicle_id == vid) | (Task.driver_id == did) if did else (Task.vehicle_id == vid)
+        ).all()
 
-            for ct in conflict_tasks:
-                ct_start = ct.departure_time
-                ct_end = ct_start + timedelta(days=ct.rental_days)
-                if task_start < ct_end and task_end > ct_start:
-                    vehicle = Vehicle.query.get(vid)
-                    driver = Driver.query.get(did) if did else None
-                    return jsonify({'code': 400, 'msg': f'{vehicle.plate_number if vehicle else ""} 或 {driver.name if driver else ""} 在此时间段已被安排'})
+        for ct in conflict_tasks:
+            ct_start = ct.departure_time
+            ct_end = ct_start + timedelta(days=ct.rental_days)
+            if task_start < ct_end and task_end > ct_start:
+                vehicle = Vehicle.query.get(vid)
+                driver = Driver.query.get(did) if did else None
+                return jsonify({'code': 400, 'msg': f'{vehicle.plate_number if vehicle else ""} 或 {driver.name if driver else ""} 在此时间段已被安排'})
 
     # 清除旧的车辆分配
     TaskVehicle.query.filter_by(task_id=task_id).delete()
@@ -1387,7 +1381,6 @@ def schedule_task(task_id):
             task_id=task_id,
             vehicle_id=a.get('vehicle_id'),
             driver_id=a.get('driver_id'),
-            external_plate=(a.get('external_plate') or '').strip() if is_external else '',
             status='scheduled'
         )
         db.session.add(tv)
@@ -1397,24 +1390,22 @@ def schedule_task(task_id):
     if remark is not None:
         task.remark = remark
 
-    # 设置主车辆/司机为第一个分配（外部车辆不设置）
-    if not is_external:
-        task.vehicle_id = assignments[0].get('vehicle_id')
-        task.driver_id = assignments[0].get('driver_id')
+    # 设置主车辆/司机为第一个分配
+    task.vehicle_id = assignments[0].get('vehicle_id')
+    task.driver_id = assignments[0].get('driver_id')
     task.status = 'scheduled'
     
-    # 记录排班时车辆的当前里程作为起始里程（外部车辆跳过）
-    if not is_external and task.start_mileage == 0:
+    # 记录排班时车辆的当前里程作为起始里程
+    if task.start_mileage == 0:
         first_vehicle = Vehicle.query.get(assignments[0].get('vehicle_id'))
         if first_vehicle:
             task.start_mileage = first_vehicle.mileage or 0
 
-    # 更新相关车辆状态（外部车辆跳过）
-    if not is_external:
-        for a in assignments:
-            vehicle = Vehicle.query.get(a.get('vehicle_id'))
-            if vehicle:
-                vehicle.status = 'busy'
+    # 更新相关车辆状态
+    for a in assignments:
+        vehicle = Vehicle.query.get(a.get('vehicle_id'))
+        if vehicle:
+            vehicle.status = 'busy'
 
     db.session.commit()
     return jsonify({'code': 200, 'msg': '排班成功', 'data': task.to_dict()})
