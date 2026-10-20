@@ -328,6 +328,7 @@
                   <el-icon><Plus /></el-icon><span style="margin-left:2px">添加车辆</span>
                 </el-button>
                 <span style="margin-left:12px;color:#909399;font-size:13px">共 {{ totalVehicleCount }} 台车</span>
+                <el-checkbox v-model="taskForm.external_vehicle" style="margin-left:16px" @change="onExternalVehicleChange">外部车辆（10%提成）</el-checkbox>
               </div>
             </el-form-item>
           </el-col>
@@ -370,7 +371,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <template v-if="!taskForm.self_drive">
+        <template v-if="!taskForm.self_drive && !taskForm.external_vehicle">
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="任务里程(km)">
@@ -405,6 +406,7 @@
           </el-col>
         </el-row>
         </template>
+        <template v-if="!taskForm.external_vehicle">
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="预计成本">
@@ -414,6 +416,15 @@
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="预估利润">
               <el-input :model-value="estimatedProfit" disabled />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        </template>
+        <el-row v-else :gutter="isMobile ? 0 : 20">
+          <el-col :span="24">
+            <el-form-item label="预估利润">
+              <span style="color:#409eff;font-weight:600">¥{{ externalProfit.toFixed(2) }}</span>
+              <span style="color:#909399;font-size:12px;margin-left:8px">（租车费10%提成）</span>
             </el-form-item>
           </el-col>
         </el-row>
@@ -441,6 +452,8 @@
         <el-form-item label="目的地">
           <el-tag>{{ scheduleInfo.destination }}</el-tag>
         </el-form-item>
+        </template>
+        <template v-if="!currentScheduleTask?.self_drive && !currentScheduleTask?.external_vehicle">
         <el-form-item label="司机人工费">
           <el-tag>{{ scheduleInfo.labor_fee }} 元</el-tag>
         </el-form-item>
@@ -448,10 +461,22 @@
           <span style="color:#909399;font-size:13px">{{ scheduleInfo.settlement_start }}-{{ scheduleInfo.settlement_end }}</span>
         </el-form-item>
         </template>
-        
+
         <el-divider content-position="left">{{ currentScheduleTask?.self_drive ? '车辆分配' : '车辆分配（' + scheduleAssignments.length + '台）' }}</el-divider>
-        
-        <template v-if="currentScheduleTask?.self_drive">
+
+        <template v-if="currentScheduleTask?.external_vehicle">
+        <!-- 外部车辆排班：仅填外部车牌 -->
+        <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+          <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
+          <el-tag v-if="a.capacity" size="small" type="warning" style="flex-shrink:0">{{ a.capacity }}</el-tag>
+          <el-input v-model="a.external_plate" :placeholder="a.capacity ? a.capacity + ' 外部车牌' : '外部车牌'" style="flex:1" />
+        </div>
+        <el-form-item label="备注" style="margin-top:12px">
+          <el-input v-model="scheduleRemark" type="textarea" :rows="2" placeholder="选填" />
+        </el-form-item>
+        </template>
+
+        <template v-else-if="currentScheduleTask?.self_drive">
         <!-- 自驾车排班布局 -->
         <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="margin-bottom:16px;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
           <el-form-item label="选择车辆" style="margin-bottom:8px">
@@ -492,7 +517,7 @@
     </el-dialog>
 
     <!-- Complete Task Dialog -->
-    <el-dialog v-model="completeDialogVisible" :title="isSelfDriveComplete ? '完成任务 - 录入里程' : '完成任务 - 录入实际费用'" :width="isMobile ? '100%' : '500px'" :fullscreen="isMobile">
+    <el-dialog v-model="completeDialogVisible" :title="isSelfDriveComplete ? '完成任务 - 录入里程' : (isExternalComplete ? '完成任务 - 外部车辆结算' : '完成任务 - 录入实际费用')" :width="isMobile ? '100%' : '500px'" :fullscreen="isMobile">
       <el-form :model="completeForm" :label-width="isMobile ? '100px' : '110px'">
         <template v-if="!currentCompleteTask?.return_time">
         <el-form-item label="回程时间">
@@ -504,7 +529,15 @@
           <el-input-number v-model="completeForm.rental_fee" :min="0" :precision="2" style="width:100%" />
         </el-form-item>
         </template>
-        <template v-if="!isSelfDriveComplete">
+        <template v-if="isExternalComplete">
+        <el-form-item label="租车费(元)">
+          <el-input :model-value="completeForm.rental_fee" disabled />
+        </el-form-item>
+        <el-form-item label="提成利润(10%)">
+          <span style="color:#409eff;font-weight:600">¥{{ ((completeForm.rental_fee || 0) * 0.1).toFixed(2) }}</span>
+        </el-form-item>
+        </template>
+        <template v-if="!isSelfDriveComplete && !isExternalComplete">
         <el-form-item label="油电费(预估)">
           <el-input :model-value="completeForm.actual_fuel_fee" disabled />
         </el-form-item>
@@ -1056,7 +1089,7 @@ const taskForm = ref({
   client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null,
   departure: '', destination: '', departure_time: '', return_time: '',
   vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1 }],
-  self_drive: false, mileage: 0, rental_fee: 0,
+  self_drive: false, external_vehicle: false, mileage: 0, rental_fee: 0,
   fuel_fee: 0, bridge_fee: 0, labor_fee: 0, remark: ''
 })
 
@@ -1114,7 +1147,8 @@ const currentCompleteTask = ref(null)
 
 const showMileageFields = computed(() => {
   const task = currentCompleteTask.value
-  if (!task || !task.vehicle_id) return false
+  if (!task || task.external_vehicle) return false
+  if (!task.vehicle_id) return false
   // 自驾车也显示里程（只读）
   if (task.self_drive) return true
   // 核定载人数12座以下且不是国开司的车辆
@@ -1126,11 +1160,34 @@ const showMileageFields = computed(() => {
 })
 
 const isSelfDriveComplete = computed(() => currentCompleteTask.value?.self_drive || false)
+const isExternalComplete = computed(() => currentCompleteTask.value?.external_vehicle || false)
 
 const estimatedCost = computed(() => (taskForm.value.fuel_fee + taskForm.value.bridge_fee + taskForm.value.labor_fee).toFixed(2))
+const externalProfit = computed(() => (taskForm.value.rental_fee || 0) * 0.1)
+
+const onExternalVehicleChange = () => {
+  if (taskForm.value.external_vehicle) {
+    // 外部车辆：清零费用字段
+    taskForm.value.mileage = 0
+    taskForm.value.fuel_fee = 0
+    taskForm.value.bridge_fee = 0
+    taskForm.value.labor_fee = 0
+  } else {
+    recalcFuelFee()
+  }
+}
 const estimatedProfit = computed(() => (taskForm.value.rental_fee - taskForm.value.fuel_fee - taskForm.value.bridge_fee - taskForm.value.labor_fee).toFixed(2))
-const actualCostDisplay = computed(() => (completeForm.value.actual_fuel_fee + completeForm.value.actual_bridge_fee + completeForm.value.actual_labor_fee + completeForm.value.other_fee).toFixed(2))
+const actualCostDisplay = computed(() => {
+  if (isExternalComplete.value) {
+    const rental = completeForm.value.rental_fee || 0
+    return (rental - (rental * 0.1 - (completeForm.value.other_fee || 0))).toFixed(2)
+  }
+  return (completeForm.value.actual_fuel_fee + completeForm.value.actual_bridge_fee + completeForm.value.actual_labor_fee + completeForm.value.other_fee).toFixed(2)
+})
 const finalProfitDisplay = computed(() => {
+  if (isExternalComplete.value) {
+    return ((completeForm.value.rental_fee || 0) * 0.1 - (completeForm.value.other_fee || 0)).toFixed(2)
+  }
   const task = tasks.value.find(t => t.id === completeTaskId.value)
   const rental = task ? task.rental_fee : 0
   return (rental - completeForm.value.actual_fuel_fee - completeForm.value.actual_bridge_fee - completeForm.value.actual_labor_fee - completeForm.value.other_fee).toFixed(2)
@@ -1149,7 +1206,7 @@ const loadTasks = async () => {
 const showAddDialog = () => {
   isEdit.value = false
   editId.value = null
-  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1 }], self_drive: false, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
+  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1 }], self_drive: false, external_vehicle: false, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
   taskDialogVisible.value = true
 }
 
@@ -1166,6 +1223,8 @@ const showEditDialog = (row) => {
     departure: row.departure, destination: row.destination,
     departure_time: row.departure_time, return_time: row.return_time || '', vehicle_type: row.vehicle_type,
     capacityPlan: plan,
+    self_drive: row.self_drive || false,
+    external_vehicle: row.external_vehicle || false,
     mileage: row.mileage, rental_fee: row.rental_fee, fuel_fee: row.fuel_fee,
     bridge_fee: row.bridge_fee, labor_rate_id: matchedRate ? matchedRate.id : null, labor_fee: row.labor_fee,
     remark: row.remark || ''
@@ -1226,7 +1285,7 @@ const showScheduleDialog = async (row) => {
   for (const p of plan) {
     const c = p.count || 1
     for (let i = 0; i < c; i++) {
-      slots.push({ vehicle_id: null, driver_id: null, capacity: p.vehicle_type || '' })
+      slots.push({ vehicle_id: null, driver_id: null, external_plate: '', capacity: p.vehicle_type || '' })
     }
   }
   scheduleAssignments.value = slots
@@ -1237,6 +1296,7 @@ const showScheduleDialog = async (row) => {
       if (idx < scheduleAssignments.value.length) {
         scheduleAssignments.value[idx].vehicle_id = tv.vehicle_id
         scheduleAssignments.value[idx].driver_id = tv.driver_id
+        scheduleAssignments.value[idx].external_plate = tv.external_plate || ''
       }
     })
   }
@@ -1270,16 +1330,24 @@ const getAvailableDrivers = (currentIdx) => {
 
 const submitSchedule = async () => {
   const isSelfDrive = currentScheduleTask.value?.self_drive
+  const isExternal = currentScheduleTask.value?.external_vehicle
   // 验证所有分配都已填写
   for (let i = 0; i < scheduleAssignments.value.length; i++) {
     const a = scheduleAssignments.value[i]
-    if (!a.vehicle_id) {
-      ElMessage.warning(`请为第${i + 1}台车选择车辆`)
-      return
-    }
-    if (!isSelfDrive && !a.driver_id) {
-      ElMessage.warning(`请为第${i + 1}台车选择司机`)
-      return
+    if (isExternal) {
+      if (!(a.external_plate || '').trim()) {
+        ElMessage.warning(`请填写第${i + 1}台外部车牌`)
+        return
+      }
+    } else {
+      if (!a.vehicle_id) {
+        ElMessage.warning(`请为第${i + 1}台车选择车辆`)
+        return
+      }
+      if (!isSelfDrive && !a.driver_id) {
+        ElMessage.warning(`请为第${i + 1}台车选择司机`)
+        return
+      }
     }
   }
   try {

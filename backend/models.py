@@ -191,6 +191,7 @@ class Task(db.Model):
     vehicle_count = db.Column(db.Integer, default=1)  # 用车数量
     capacity_plan = db.Column(db.Text, default='')  # 座位数配置 JSON: [{"vehicle_type":"49座","count":1},...]
     self_drive = db.Column(db.Boolean, default=False)  # 是否自驾车
+    external_vehicle = db.Column(db.Boolean, default=False)  # 是否外部车辆（利润按租车费10%提成）
     departure_time = db.Column(db.DateTime, nullable=False)  # 出车时间
     return_time = db.Column(db.DateTime, nullable=True)  # 回程时间
     rental_days = db.Column(db.Float, default=1)  # 租用天数(自动计算)
@@ -289,6 +290,7 @@ class Task(db.Model):
             'vehicle_count': self.vehicle_count or 1,
             'capacity_plan': self.get_capacity_plan(),
             'self_drive': self.self_drive or False,
+            'external_vehicle': self.external_vehicle or False,
             'task_vehicles': [tv.to_dict() for tv in self.task_vehicles] if hasattr(self, 'task_vehicles') else [],
             'vehicle_plate': self.vehicle.plate_number if self.vehicle else None,
             'vehicle_company': self.vehicle.company if self.vehicle else '',
@@ -341,6 +343,7 @@ class TaskVehicle(db.Model):
     task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=False)
     vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True)
     driver_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=True)
+    external_plate = db.Column(db.String(20), default='')  # 外部车牌（vehicle_id为空时使用）
     status = db.Column(db.String(20), default='pending')  # pending/scheduled/completed
     created_at = db.Column(db.DateTime, default=datetime.now)
 
@@ -352,11 +355,12 @@ class TaskVehicle(db.Model):
             'id': self.id,
             'task_id': self.task_id,
             'vehicle_id': self.vehicle_id,
-            'vehicle_plate': self.vehicle.plate_number if self.vehicle else '',
+            'vehicle_plate': self.vehicle.plate_number if self.vehicle else (self.external_plate or ''),
             'vehicle_capacity': self.vehicle.capacity if self.vehicle else '',
             'driver_id': self.driver_id,
             'driver_name': self.driver.name if self.driver else '',
             'driver_phone': self.driver.phone if self.driver else '',
+            'external_plate': self.external_plate or '',
             'status': self.status,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
         }

@@ -1052,6 +1052,7 @@ def create_task():
         vehicle_count=vehicle_count,
         capacity_plan=capacity_plan_json,
         self_drive=data.get('self_drive', False),
+        external_vehicle=data.get('external_vehicle', False),
         mileage=data.get('mileage', 0),
         rental_fee=data.get('rental_fee', 0),
         fuel_fee=data.get('fuel_fee', 0),
@@ -1060,8 +1061,17 @@ def create_task():
         remark=data.get('remark', ''),
         status='pending'
     )
-    task.estimated_cost = task.fuel_fee + task.bridge_fee + task.labor_fee
-    task.estimated_profit = task.rental_fee - task.estimated_cost
+    if task.external_vehicle:
+        # 外部车辆：费用归零，利润按租车费10%提成
+        task.mileage = 0
+        task.fuel_fee = 0
+        task.bridge_fee = 0
+        task.labor_fee = 0
+        task.estimated_cost = round((task.rental_fee or 0) * 0.9, 2)
+        task.estimated_profit = round((task.rental_fee or 0) * 0.1, 2)
+    else:
+        task.estimated_cost = task.fuel_fee + task.bridge_fee + task.labor_fee
+        task.estimated_profit = task.rental_fee - task.estimated_cost
     db.session.add(task)
     db.session.flush()
     # 自动生成任务编号：TASK-YYYYMMDD-ID
@@ -1144,10 +1154,23 @@ def update_task(task_id):
     if 'departure_time' in data or 'return_time' in data:
         task.rental_days = calc_rental_days(task.departure_time, task.return_time)
 
+    # 外部车辆标记变更
+    if 'external_vehicle' in data:
+        task.external_vehicle = bool(data.get('external_vehicle'))
+        if task.external_vehicle:
+            task.mileage = 0
+            task.fuel_fee = 0
+            task.bridge_fee = 0
+            task.labor_fee = 0
+
     # 重算预计成本和预估利润（费用字段可能被修改）
-    if any(f in data for f in ('rental_fee', 'fuel_fee', 'bridge_fee', 'labor_fee')):
-        task.estimated_cost = (task.fuel_fee or 0) + (task.bridge_fee or 0) + (task.labor_fee or 0)
-        task.estimated_profit = (task.rental_fee or 0) - task.estimated_cost
+    if any(f in data for f in ('rental_fee', 'fuel_fee', 'bridge_fee', 'labor_fee', 'external_vehicle')):
+        if task.external_vehicle:
+            task.estimated_cost = round((task.rental_fee or 0) * 0.9, 2)
+            task.estimated_profit = round((task.rental_fee or 0) * 0.1, 2)
+        else:
+            task.estimated_cost = (task.fuel_fee or 0) + (task.bridge_fee or 0) + (task.labor_fee or 0)
+            task.estimated_profit = (task.rental_fee or 0) - task.estimated_cost
 
     if change_list:
         # Take snapshot AFTER applying changes
@@ -1317,7 +1340,7 @@ def schedule_task(task_id):
         driver_id = data.get('driver_id')
         if vehicle_id and driver_id:
             assignments = [{'vehicle_id': vehicle_id, 'driver_id': driver_id}]
-    
+
     if not assignments:
         return jsonify({'code': 400, 'msg': '请选择车辆和司机'})
 
@@ -1325,63 +1348,73 @@ def schedule_task(task_id):
     task_start = task.departure_time
     task_end = task_start + timedelta(days=task.rental_days)
     is_self_drive = task.self_drive or False
-    
-    for a in assignments:
-        vid = a.get('vehicle_id')
-        did = a.get('driver_id')
-        if not vid:
-            return jsonify({'code': 400, 'msg': '请选择车辆'})
-        if not is_self_drive and not did:
-            return jsonify({'code': 400, 'msg': '请选择司机'})
-        
-        conflict_tasks = Task.query.filter(
-            Task.id != task_id,
-            Task.status.in_(['scheduled']),
-            (Task.vehicle_id == vid) | (Task.driver_id == did) if did else (Task.vehicle_id == vid)
-        ).all()
-        
-        for ct in conflict_tasks:
-            ct_start = ct.departure_time
-            ct_end = ct_start + timedelta(days=ct.rental_days)
-            if task_start < ct_end and task_end > ct_start:
-                vehicle = Vehicle.query.get(vid)
-                driver = Driver.query.get(did) if did else None
-                return jsonify({'code': 400, 'msg': f'{vehicle.plate_number if vehicle else ""} 或 {driver.name if driver else ""} 在此时间段已被安排'})
-    
+    is_external = task.external_vehicle or False
+
+    if is_external:
+        # 外部车辆：只需填写外部车牌
+        for i, a in enumerate(assignments):
+            if not (a.get('external_plate') or '').strip():
+                return jsonify({'code': 400, 'msg': f'请填写第{i + 1}台外部车牌'})
+    else:
+        for a in assignments:
+            vid = a.get('vehicle_id')
+            did = a.get('driver_id')
+            if not vid:
+                return jsonify({'code': 400, 'msg': '请选择车辆'})
+            if not is_self_drive and not did:
+                return jsonify({'code': 400, 'msg': '请选择司机'})
+
+            conflict_tasks = Task.query.filter(
+                Task.id != task_id,
+                Task.status.in_(['scheduled']),
+                (Task.vehicle_id == vid) | (Task.driver_id == did) if did else (Task.vehicle_id == vid)
+            ).all()
+
+            for ct in conflict_tasks:
+                ct_start = ct.departure_time
+                ct_end = ct_start + timedelta(days=ct.rental_days)
+                if task_start < ct_end and task_end > ct_start:
+                    vehicle = Vehicle.query.get(vid)
+                    driver = Driver.query.get(did) if did else None
+                    return jsonify({'code': 400, 'msg': f'{vehicle.plate_number if vehicle else ""} 或 {driver.name if driver else ""} 在此时间段已被安排'})
+
     # 清除旧的车辆分配
     TaskVehicle.query.filter_by(task_id=task_id).delete()
-    
+
     # 创建新的车辆分配
     for a in assignments:
         tv = TaskVehicle(
             task_id=task_id,
-            vehicle_id=a['vehicle_id'],
+            vehicle_id=a.get('vehicle_id'),
             driver_id=a.get('driver_id'),
+            external_plate=(a.get('external_plate') or '').strip() if is_external else '',
             status='scheduled'
         )
         db.session.add(tv)
-    
+
     # 更新备注
     remark = data.get('remark')
     if remark is not None:
         task.remark = remark
-    
-    # 设置主车辆/司机为第一个分配
-    task.vehicle_id = assignments[0]['vehicle_id']
-    task.driver_id = assignments[0].get('driver_id')
+
+    # 设置主车辆/司机为第一个分配（外部车辆不设置）
+    if not is_external:
+        task.vehicle_id = assignments[0].get('vehicle_id')
+        task.driver_id = assignments[0].get('driver_id')
     task.status = 'scheduled'
     
-    # 记录排班时车辆的当前里程作为起始里程
-    if task.start_mileage == 0:
-        first_vehicle = Vehicle.query.get(assignments[0]['vehicle_id'])
+    # 记录排班时车辆的当前里程作为起始里程（外部车辆跳过）
+    if not is_external and task.start_mileage == 0:
+        first_vehicle = Vehicle.query.get(assignments[0].get('vehicle_id'))
         if first_vehicle:
             task.start_mileage = first_vehicle.mileage or 0
-    
-    # 更新相关车辆状态
-    for a in assignments:
-        vehicle = Vehicle.query.get(a['vehicle_id'])
-        if vehicle:
-            vehicle.status = 'busy'
+
+    # 更新相关车辆状态（外部车辆跳过）
+    if not is_external:
+        for a in assignments:
+            vehicle = Vehicle.query.get(a.get('vehicle_id'))
+            if vehicle:
+                vehicle.status = 'busy'
 
     db.session.commit()
     return jsonify({'code': 200, 'msg': '排班成功', 'data': task.to_dict()})
@@ -1418,16 +1451,25 @@ def complete_task(task_id):
     rental_fee = data.get('rental_fee')
     if rental_fee is not None:
         task.rental_fee = rental_fee
-    
+
     # 计算成本和利润
-    task.actual_cost = task.actual_fuel_fee + task.actual_bridge_fee + task.actual_labor_fee + task.other_fee
-    task.final_profit = task.rental_fee - task.actual_cost
-    
-    # 处理里程数
-    start_mileage = data.get('start_mileage', 0)
-    end_mileage = data.get('end_mileage', 0)
-    task.start_mileage = start_mileage
-    task.end_mileage = end_mileage
+    if task.external_vehicle:
+        # 外部车辆：利润 = 租车费 × 10% − 其他费用
+        task.actual_fuel_fee = 0
+        task.actual_bridge_fee = 0
+        task.actual_labor_fee = 0
+        task.final_profit = round((task.rental_fee or 0) * 0.1 - (task.other_fee or 0), 2)
+        task.actual_cost = round((task.rental_fee or 0) - task.final_profit, 2)
+    else:
+        task.actual_cost = task.actual_fuel_fee + task.actual_bridge_fee + task.actual_labor_fee + task.other_fee
+        task.final_profit = task.rental_fee - task.actual_cost
+
+    # 处理里程数（外部车辆跳过）
+    if not task.external_vehicle:
+        start_mileage = data.get('start_mileage', 0)
+        end_mileage = data.get('end_mileage', 0)
+        task.start_mileage = start_mileage
+        task.end_mileage = end_mileage
     
     # 更新车辆里程数
     if task.vehicle_id and end_mileage > 0:
@@ -3000,6 +3042,7 @@ def init_db():
         ('vehicle_count', "INT DEFAULT 1"),
         ('capacity_plan', "TEXT"),
         ('self_drive', "TINYINT DEFAULT 0"),
+        ('external_vehicle', "TINYINT DEFAULT 0"),
     ]:
         try:
             db.session.execute(db.text(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}"))
@@ -3007,6 +3050,14 @@ def init_db():
         except Exception:
             app.logger.debug(f"ALTER TABLE tasks.{col} skipped (already exists)")
             db.session.rollback()
+
+    # task_vehicles 增加外部车牌列
+    try:
+        db.session.execute(db.text("ALTER TABLE task_vehicles ADD COLUMN external_plate VARCHAR(20) DEFAULT ''"))
+        db.session.commit()
+    except Exception:
+        app.logger.debug("ALTER TABLE task_vehicles.external_plate skipped (already exists)")
+        db.session.rollback()
 
     # 给 users 表增加 yunzhijia_openid 字段（兼容旧库）
     try:
