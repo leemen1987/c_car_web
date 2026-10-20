@@ -469,7 +469,10 @@
         <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="margin-bottom:16px;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
           <el-form-item label="选择车辆" style="margin-bottom:8px">
             <el-select v-model="a.vehicle_id" placeholder="请选择车辆" style="width:100%" filterable @change="(val) => onScheduleVehicleChange(idx, val)">
-              <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
+              <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id">
+                <span>{{ v.plate_number }}{{ v.capacity ? ' (' + v.capacity + ')' : '' }}</span>
+                <el-tag v-if="v.is_busy" type="warning" size="small" style="margin-left:6px">出车中</el-tag>
+              </el-option>
             </el-select>
           </el-form-item>
           <el-form-item v-if="a.vehicle_id" label="当前里程" style="margin-bottom:0">
@@ -487,7 +490,10 @@
           <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
           <el-tag v-if="a.capacity" size="small" type="warning" style="flex-shrink:0">{{ a.capacity }}</el-tag>
           <el-select v-model="a.vehicle_id" :placeholder="a.capacity ? '选择' + a.capacity + '车辆' : '选择车辆'" style="flex:1" filterable>
-            <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id" />
+            <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id">
+              <span>{{ v.plate_number }}{{ v.capacity ? ' (' + v.capacity + ')' : '' }}</span>
+              <el-tag v-if="v.is_busy" type="warning" size="small" style="margin-left:6px">出车中</el-tag>
+            </el-option>
           </el-select>
           <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
             <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id">
