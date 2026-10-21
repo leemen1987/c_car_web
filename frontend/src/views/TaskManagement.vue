@@ -1059,8 +1059,9 @@ const approvalDateRange = ref(null)
 const approvalSelectedTasks = ref([])
 const approvalLoading = ref(false)
 const schedulableTasks = computed(() => {
-  // 已发起（submitted）和已通过（approved）的审批不显示，已拒绝的可重新发起
+  // 已发起/已通过的审批不显示，已过出车时间的也不显示；已拒绝的可重新发起
   let list = tasks.value.filter(t => t.status === 'scheduled' && (!t.yzj_approval_status || t.yzj_approval_status === 'rejected'))
+  list = list.filter(t => !isPastDeparture(t))
   // 按出车日期筛选
   if (approvalDateRange.value && approvalDateRange.value.length === 2) {
     const [start, end] = approvalDateRange.value
