@@ -1095,6 +1095,13 @@ def update_task(task_id):
         return jsonify({'code': 404, 'msg': '任务不存在'})
     data = request.get_json()
 
+    # 已完成任务修改必须填写修改说明
+    edit_reason = (data.get('edit_reason') or '').strip()
+    if task.status == 'completed':
+        if not edit_reason:
+            return jsonify({'code': 400, 'msg': '请填写修改说明'})
+        task.edit_reason = edit_reason
+
     # Handle client type change
     if 'client_type' in data:
         client_type = data.get('client_type', 'personal')
@@ -1190,6 +1197,13 @@ def update_task(task_id):
             'labor_fee': task.labor_fee,
         }
         task.add_changes(change_list, snapshot)
+
+    # 修改说明记入变更记录
+    if edit_reason:
+        task.add_changes(
+            [{'field': '修改说明', 'old_value': '', 'new_value': edit_reason}],
+            {'edit_reason': edit_reason}
+        )
 
     # 座位数配置更新
     if 'capacity_plan' in data:
@@ -3007,6 +3021,7 @@ def init_db():
         ('invoice_date', "DATETIME NULL"),
         ('invoice_remark', "TEXT"),
         ('contract_no', "VARCHAR(50) DEFAULT ''"),
+        ('edit_reason', "TEXT"),
         ('start_mileage', "FLOAT DEFAULT 0"),
         ('end_mileage', "FLOAT DEFAULT 0"),
         ('vehicle_count', "INT DEFAULT 1"),

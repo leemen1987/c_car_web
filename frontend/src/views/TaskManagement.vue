@@ -166,6 +166,7 @@
               <el-button v-if="row.status === 'scheduled'" type="success" size="small" :disabled="!isPastReturn(row)" @click="showCompleteDialog(row)">完成</el-button>
               <el-button v-if="row.status === 'pending' || row.status === 'scheduled'" type="danger" size="small" plain @click="showCancelDialog(row)">取消</el-button>
               <el-button v-if="(row.status === 'completed' || row.status === 'cancelled') && row.change_log && row.change_log.length" type="info" size="small" @click="showChangeLog(row)">变更记录</el-button>
+              <el-button v-if="row.edit_reason" type="danger" size="small" plain @click="showEditReason(row)">已修改</el-button>
               <el-dropdown trigger="click">
                 <el-button size="small" type="info" plain>更多 <el-icon style="margin-left:2px"><ArrowDown /></el-icon></el-button>
                 <template #dropdown>
@@ -174,7 +175,7 @@
                     <el-dropdown-item v-if="row.schedule_confirm_status" @click="showConfirmDetail(row)">确认详情</el-dropdown-item>
                     <el-dropdown-item v-if="row.status === 'completed'" @click="showInvoiceDialog(row)">录入发票</el-dropdown-item>
                     <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled' && row.change_log && row.change_log.length" @click="showChangeLog(row)">变更记录</el-dropdown-item>
-                    <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled'" @click="showEditDialog(row)">编辑</el-dropdown-item>
+                    <el-dropdown-item v-if="row.status !== 'cancelled'" @click="showEditDialog(row)">编辑</el-dropdown-item>
                     <el-dropdown-item divided>
                       <span style="color:#f56c6c;width:100%;display:block" @click="confirmDelete(row.id)">删除</span>
                     </el-dropdown-item>
@@ -256,7 +257,7 @@
                 <el-dropdown-menu>
                   <el-dropdown-item v-if="row.schedule_confirm_status" @click="showConfirmDetail(row)">确认详情</el-dropdown-item>
                   <el-dropdown-item v-if="row.status === 'completed'" @click="showInvoiceDialog(row)">录入发票</el-dropdown-item>
-                  <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled'" @click="showEditDialog(row)">编辑</el-dropdown-item>
+                  <el-dropdown-item v-if="row.status !== 'cancelled'" @click="showEditDialog(row)">编辑</el-dropdown-item>
                   <el-dropdown-item v-if="row.change_log && row.change_log.length" @click="showChangeLog(row)">变更记录</el-dropdown-item>
                   <el-dropdown-item divided>
                     <span style="color:#f56c6c;width:100%;display:block" @click="confirmDelete(row.id)">删除</span>
@@ -271,8 +272,15 @@
     </el-card>
 
     <!-- Add/Edit Task Dialog -->
-    <el-dialog v-model="taskDialogVisible" :title="isEdit ? '编辑任务' : '录入任务'" :width="isMobile ? '100%' : '700px'" :fullscreen="isMobile">
+    <el-dialog v-model="taskDialogVisible" :title="isEdit ? (isCompletedEdit ? '编辑任务（需填写修改说明）' : '编辑任务') : '录入任务'" :width="isMobile ? '100%' : '700px'" :fullscreen="isMobile">
       <el-form :model="taskForm" :label-width="isMobile ? '90px' : '110px'">
+        <el-row v-if="isCompletedEdit" :gutter="isMobile ? 0 : 20">
+          <el-col :span="24">
+            <el-form-item label="修改说明" required>
+              <el-input v-model="editReason" type="textarea" :rows="2" placeholder="已完成任务修改必填，请说明修改原因" />
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="24">
             <el-form-item label="用车类型">
@@ -669,6 +677,32 @@
       </div>
     </el-dialog>
 
+    <!-- 修改说明弹窗 -->
+    <el-dialog v-model="editReasonVisible" title="修改记录" :width="isMobile ? '100%' : '600px'" :fullscreen="isMobile">
+      <div v-if="editReasonRow">
+        <el-alert type="warning" :closable="false" style="margin-bottom:12px">
+          <template #title>修改说明</template>
+          <div style="margin-top:4px">{{ editReasonRow.edit_reason }}</div>
+        </el-alert>
+        <div v-if="currentChangeLog.length" style="font-size:14px;font-weight:600;margin-bottom:8px">变更历史</div>
+        <el-timeline v-if="currentChangeLog.length">
+          <el-timeline-item v-for="(log, idx) in currentChangeLog" :key="idx" :timestamp="log.changed_at" placement="top">
+            <template v-if="log.snapshot && log.snapshot.edit_reason">
+              <el-tag type="warning" size="small">修改说明</el-tag>
+              <div style="margin-top:4px">{{ log.snapshot.edit_reason }}</div>
+            </template>
+            <template v-else>
+              <el-tag v-if="log.field" type="warning" size="small" style="margin-right:8px">{{ log.field }}</el-tag>
+              <span style="color:#909399">{{ log.old_value }}</span>
+              <span style="margin:0 6px">→</span>
+              <span>{{ log.new_value }}</span>
+            </template>
+          </el-timeline-item>
+        </el-timeline>
+        <el-empty v-else description="无变更历史" :image-size="60" />
+      </div>
+    </el-dialog>
+
     <!-- Cancel Task Dialog -->
     <el-dialog v-model="cancelDialogVisible" title="取消任务" :width="isMobile ? '100%' : '450px'" :fullscreen="isMobile">
       <el-form label-width="80px">
@@ -1042,8 +1076,12 @@ const taskDialogVisible = ref(false)
 const scheduleDialogVisible = ref(false)
 const completeDialogVisible = ref(false)
 const changeLogVisible = ref(false)
+const editReasonVisible = ref(false)
+const editReasonRow = ref(null)
 const isEdit = ref(false)
 const editId = ref(null)
+const isCompletedEdit = ref(false)
+const editReason = ref('')
 const currentChangeLog = ref([])
 const cancelDialogVisible = ref(false)
 const cancelTaskId = ref(null)
@@ -1227,6 +1265,8 @@ const showAddDialog = () => {
 const showEditDialog = (row) => {
   isEdit.value = true
   editId.value = row.id
+  isCompletedEdit.value = row.status === 'completed'
+  editReason.value = ''
   const matchedRate = laborRates.value.find(r => r.location === row.destination)
   const plan = (row.capacity_plan && row.capacity_plan.length)
     ? row.capacity_plan.map(p => ({ vehicle_type: p.vehicle_type, count: p.count }))
@@ -1267,8 +1307,12 @@ const submitTask = async () => {
     ElMessage.warning('回程时间不能早于出车时间')
     return
   }
+  if (isCompletedEdit.value && !editReason.value.trim()) {
+    ElMessage.warning('已完成任务修改需填写修改说明')
+    return
+  }
   try {
-    const payload = { ...taskForm.value, capacity_plan: taskForm.value.capacityPlan }
+    const payload = { ...taskForm.value, capacity_plan: taskForm.value.capacityPlan, edit_reason: editReason.value.trim() }
     if (isEdit.value) {
       await api.put(`/tasks/${editId.value}`, payload)
       ElMessage.success('更新成功')
@@ -1437,6 +1481,12 @@ const confirmDelete = async (id) => {
 const showChangeLog = (row) => {
   currentChangeLog.value = row.change_log || []
   changeLogVisible.value = true
+}
+
+const showEditReason = (row) => {
+  editReasonRow.value = row
+  currentChangeLog.value = row.change_log || []
+  editReasonVisible.value = true
 }
 
 const showCancelDialog = (row) => {

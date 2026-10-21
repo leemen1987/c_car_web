@@ -219,6 +219,7 @@ class Task(db.Model):
     invoice_date = db.Column(db.DateTime, nullable=True)  # 开票日期
     invoice_remark = db.Column(db.Text, default='')  # 发票备注
     contract_no = db.Column(db.String(50), default='')  # 包车合同编号
+    edit_reason = db.Column(db.Text, default='')  # 已完成任务修改说明
     start_mileage = db.Column(db.Float, default=0)  # 起始里程数
     end_mileage = db.Column(db.Float, default=0)  # 结束里程数
     status = db.Column(db.String(20), default='pending')  # pending, scheduled, completed, cancelled
@@ -323,6 +324,7 @@ class Task(db.Model):
             'invoice_date': self.invoice_date.strftime('%Y-%m-%d') if self.invoice_date else None,
             'invoice_remark': self.invoice_remark or '',
             'contract_no': self.contract_no or '',
+            'edit_reason': self.edit_reason or '',
             'start_mileage': self.start_mileage or 0,
             'end_mileage': self.end_mileage or 0,
             'status': self.status,
