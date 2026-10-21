@@ -1441,13 +1441,12 @@ def complete_task(task_id):
         end_mileage = data.get('end_mileage', 0)
         task.start_mileage = start_mileage
         task.end_mileage = end_mileage
-    
-    # 更新车辆里程数
-    if task.vehicle_id and end_mileage > 0:
-        vehicle = Vehicle.query.get(task.vehicle_id)
-        if vehicle:
-            vehicle.mileage = end_mileage
-    
+        # 更新车辆里程数
+        if task.vehicle_id and end_mileage > 0:
+            vehicle = Vehicle.query.get(task.vehicle_id)
+            if vehicle:
+                vehicle.mileage = end_mileage
+
     task.status = 'completed'
 
     db.session.commit()
