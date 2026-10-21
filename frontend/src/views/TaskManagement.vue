@@ -720,6 +720,8 @@
         <el-tag :type="approvalMethod === 'internal' ? 'success' : 'warning'" size="large">
           当前审批方式：{{ approvalMethod === 'internal' ? '系统审批' : '云之家审批' }}
         </el-tag>
+        <el-date-picker v-model="approvalDateRange" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
+          start-placeholder="开始日期" end-placeholder="结束日期" clearable style="width:240px" />
         <span style="color:#909399;font-size:13px">
           {{ approvalMethod === 'internal' ? '按公司匹配内部审批流程，微信逐级推送' : '发送到云之家审批模板' }}
           <template v-if="user.role === 'admin'">（切换请在审批设置中配置）</template>
@@ -1053,9 +1055,23 @@ const invoiceForm = ref({ invoice_type: '', invoice_no: '', invoice_amount: 0, i
 // 云之家审批相关
 const approvalDialogVisible = ref(false)
 const approvalMethod = ref('internal')  // internal | yunzhijia
+const approvalDateRange = ref(null)
 const approvalSelectedTasks = ref([])
 const approvalLoading = ref(false)
-const schedulableTasks = computed(() => tasks.value.filter(t => t.status === 'scheduled'))
+const schedulableTasks = computed(() => {
+  // 已发起（submitted）和已通过（approved）的审批不显示，已拒绝的可重新发起
+  let list = tasks.value.filter(t => t.status === 'scheduled' && (!t.yzj_approval_status || t.yzj_approval_status === 'rejected'))
+  // 按出车日期筛选
+  if (approvalDateRange.value && approvalDateRange.value.length === 2) {
+    const [start, end] = approvalDateRange.value
+    list = list.filter(t => {
+      if (!t.departure_time) return false
+      const d = t.departure_time.slice(0, 10)
+      return d >= start && d <= end
+    })
+  }
+  return list
+})
 
 const approvalTemplateSummary = computed(() => {
   const groups = {}
