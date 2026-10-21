@@ -720,8 +720,8 @@
         <el-tag :type="approvalMethod === 'internal' ? 'success' : 'warning'" size="large">
           当前审批方式：{{ approvalMethod === 'internal' ? '系统审批' : '云之家审批' }}
         </el-tag>
-        <el-date-picker v-model="approvalDateRange" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
-          start-placeholder="开始日期" end-placeholder="结束日期" clearable style="width:240px" />
+        <el-date-picker v-model="approvalDateRange" type="daterange" format="MM-DD" value-format="YYYY-MM-DD"
+          start-placeholder="开始日期" end-placeholder="结束日期" clearable size="small" :style="{ width: isMobile ? '180px' : '150px' }" />
         <span style="color:#909399;font-size:13px">
           {{ approvalMethod === 'internal' ? '按公司匹配内部审批流程，微信逐级推送' : '发送到云之家审批模板' }}
           <template v-if="user.role === 'admin'">（切换请在审批设置中配置）</template>
