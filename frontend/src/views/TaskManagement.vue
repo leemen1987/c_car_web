@@ -373,12 +373,44 @@
               <el-input :model-value="computedRentalDays" disabled />
             </el-form-item>
           </el-col>
+          <el-col v-if="!taskForm.self_drive" :span="isMobile ? 24 : 12">
+            <el-form-item label="租车费(元)">
+              <el-input-number v-model="taskForm.rental_fee" :min="0" :precision="2" style="width:100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <template v-if="taskForm.self_drive">
+        <el-row :gutter="isMobile ? 0 : 20">
+          <el-col :span="24">
+            <el-form-item label="计费方式">
+              <el-radio-group v-model="taskForm.rental_bill_mode" @change="recalcDailyRentalFee">
+                <el-radio value="fixed">包干总价</el-radio>
+                <el-radio value="daily">按天计费</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row v-if="taskForm.rental_bill_mode === 'fixed'" :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="租车费(元)">
               <el-input-number v-model="taskForm.rental_fee" :min="0" :precision="2" style="width:100%" />
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row v-else :gutter="isMobile ? 0 : 20">
+          <el-col :span="isMobile ? 24 : 12">
+            <el-form-item label="单价(元/天)">
+              <el-input-number v-model="taskForm.rental_daily_rate" :min="0" :precision="2" style="width:100%" @change="recalcDailyRentalFee" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="isMobile ? 24 : 12">
+            <el-form-item label="预估总价">
+              <span v-if="dailyRentalTotal !== null" style="color:#409eff;font-weight:600">¥{{ dailyRentalTotal.toFixed(2) }}</span>
+              <span v-else style="color:#909399">待定（回程后计算）</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        </template>
         <template v-if="!taskForm.self_drive && !taskForm.external_vehicle">
         <el-row :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
@@ -1141,7 +1173,7 @@ const taskForm = ref({
   client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null,
   departure: '', destination: '', departure_time: '', return_time: '',
   vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1 }],
-  self_drive: false, external_vehicle: false, mileage: 0, rental_fee: 0,
+  self_drive: false, external_vehicle: false, rental_bill_mode: 'fixed', rental_daily_rate: 0, mileage: 0, rental_fee: 0,
   fuel_fee: 0, bridge_fee: 0, labor_fee: 0, remark: ''
 })
 
@@ -1217,6 +1249,23 @@ const isExternalComplete = computed(() => currentCompleteTask.value?.external_ve
 const estimatedCost = computed(() => (taskForm.value.fuel_fee + taskForm.value.bridge_fee + taskForm.value.labor_fee).toFixed(2))
 const externalProfit = computed(() => (taskForm.value.rental_fee || 0) * 0.1)
 
+const dailyRentalTotal = computed(() => {
+  const days = taskForm.value.rental_days ?? null
+  const rt = taskForm.value.return_time
+  if (!rt) return null
+  const d = new Date(taskForm.value.departure_time), r = new Date(rt)
+  if (!taskForm.value.departure_time || r <= d) return 0
+  const hours = (r - d) / 3600000
+  const computedDays = hours <= 12 ? 0.5 : (Math.ceil(hours / 12) * 0.5)
+  return (taskForm.value.rental_daily_rate || 0) * computedDays
+})
+
+const recalcDailyRentalFee = () => {
+  if (taskForm.value.rental_bill_mode === 'daily' && dailyRentalTotal.value !== null) {
+    taskForm.value.rental_fee = dailyRentalTotal.value
+  }
+}
+
 const onExternalVehicleChange = () => {
   if (taskForm.value.external_vehicle) {
     // 外部车辆：清零费用字段
@@ -1258,7 +1307,7 @@ const loadTasks = async () => {
 const showAddDialog = () => {
   isEdit.value = false
   editId.value = null
-  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1 }], self_drive: false, external_vehicle: false, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
+  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1 }], self_drive: false, external_vehicle: false, rental_bill_mode: 'fixed', rental_daily_rate: 0, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
   taskDialogVisible.value = true
 }
 
@@ -1279,6 +1328,8 @@ const showEditDialog = (row) => {
     capacityPlan: plan,
     self_drive: row.self_drive || false,
     external_vehicle: row.external_vehicle || false,
+    rental_bill_mode: row.rental_bill_mode || 'fixed',
+    rental_daily_rate: row.rental_daily_rate || 0,
     mileage: row.mileage, rental_fee: row.rental_fee, fuel_fee: row.fuel_fee,
     bridge_fee: row.bridge_fee, labor_rate_id: matchedRate ? matchedRate.id : null, labor_fee: row.labor_fee,
     remark: row.remark || ''
@@ -1662,6 +1713,7 @@ const onLaborRateChange = (rateId) => {
 
 const onTimeChange = () => {
   recalcLaborFee()
+  recalcDailyRentalFee()
 }
 
 const disablePastDates = (date) => {
@@ -1686,6 +1738,7 @@ const onDepartureTimeChange = () => {
     ElMessage.warning('回程时间已清空，请重新选择')
   }
   recalcLaborFee()
+  recalcDailyRentalFee()
 }
 
 // 云之家审批

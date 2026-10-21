@@ -1053,6 +1053,8 @@ def create_task():
         capacity_plan=capacity_plan_json,
         self_drive=data.get('self_drive', False),
         external_vehicle=data.get('external_vehicle', False),
+        rental_bill_mode=data.get('rental_bill_mode', 'fixed'),
+        rental_daily_rate=data.get('rental_daily_rate', 0),
         mileage=data.get('mileage', 0),
         rental_fee=data.get('rental_fee', 0),
         fuel_fee=data.get('fuel_fee', 0),
@@ -1061,6 +1063,9 @@ def create_task():
         remark=data.get('remark', ''),
         status='pending'
     )
+    # 按天计费：租车费 = 单价 × 天数（天数未知时为0，完成补录后重算）
+    if task.rental_bill_mode == 'daily':
+        task.rental_fee = round((task.rental_daily_rate or 0) * (rental_days or 0), 2) if return_time else 0
     if task.external_vehicle:
         # 外部车辆：费用归零，利润按租车费10%提成
         task.mileage = 0
@@ -1160,6 +1165,15 @@ def update_task(task_id):
     # Recalculate rental_days if departure_time or return_time changed
     if 'departure_time' in data or 'return_time' in data:
         task.rental_days = calc_rental_days(task.departure_time, task.return_time)
+
+    # 租车费计费模式
+    if 'rental_bill_mode' in data:
+        task.rental_bill_mode = data.get('rental_bill_mode') or 'fixed'
+    if 'rental_daily_rate' in data:
+        task.rental_daily_rate = data.get('rental_daily_rate') or 0
+    if task.rental_bill_mode == 'daily' and any(f in data for f in ('rental_daily_rate', 'rental_bill_mode', 'departure_time', 'return_time')):
+        if task.return_time:
+            task.rental_fee = round((task.rental_daily_rate or 0) * (task.rental_days or 0), 2)
 
     # 外部车辆标记变更
     if 'external_vehicle' in data:
@@ -1431,11 +1445,14 @@ def complete_task(task_id):
     if return_time and not task.return_time:
         task.return_time = datetime.strptime(return_time, '%Y-%m-%d %H:%M')
         task.rental_days = calc_rental_days(task.departure_time, task.return_time)
-    
-    # 处理租车费（自驾车任务完成时填写）
+
+    # 处理租车费
     rental_fee = data.get('rental_fee')
     if rental_fee is not None:
         task.rental_fee = rental_fee
+    elif task.rental_bill_mode == 'daily' and task.return_time:
+        # 按天计费：补录回程后自动算总租车费
+        task.rental_fee = round((task.rental_daily_rate or 0) * (task.rental_days or 0), 2)
 
     # 计算成本和利润
     if task.external_vehicle:
@@ -3022,6 +3039,8 @@ def init_db():
         ('invoice_remark', "TEXT"),
         ('contract_no', "VARCHAR(50) DEFAULT ''"),
         ('edit_reason', "TEXT"),
+        ('rental_bill_mode', "VARCHAR(10) DEFAULT 'fixed'"),
+        ('rental_daily_rate', "FLOAT DEFAULT 0"),
         ('start_mileage', "FLOAT DEFAULT 0"),
         ('end_mileage', "FLOAT DEFAULT 0"),
         ('vehicle_count', "INT DEFAULT 1"),

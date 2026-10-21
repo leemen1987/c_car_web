@@ -220,6 +220,8 @@ class Task(db.Model):
     invoice_remark = db.Column(db.Text, default='')  # 发票备注
     contract_no = db.Column(db.String(50), default='')  # 包车合同编号
     edit_reason = db.Column(db.Text, default='')  # 已完成任务修改说明
+    rental_bill_mode = db.Column(db.String(10), default='fixed')  # 租车费计费模式：fixed包干/day按天
+    rental_daily_rate = db.Column(db.Float, default=0)  # 每日租车单价（按天计费）
     start_mileage = db.Column(db.Float, default=0)  # 起始里程数
     end_mileage = db.Column(db.Float, default=0)  # 结束里程数
     status = db.Column(db.String(20), default='pending')  # pending, scheduled, completed, cancelled
@@ -325,6 +327,8 @@ class Task(db.Model):
             'invoice_remark': self.invoice_remark or '',
             'contract_no': self.contract_no or '',
             'edit_reason': self.edit_reason or '',
+            'rental_bill_mode': self.rental_bill_mode or 'fixed',
+            'rental_daily_rate': self.rental_daily_rate or 0,
             'start_mileage': self.start_mileage or 0,
             'end_mileage': self.end_mileage or 0,
             'status': self.status,
