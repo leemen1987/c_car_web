@@ -331,13 +331,12 @@
                   <span style="color:#909399;font-size:13px">× </span>
                   <el-input-number v-model="p.count" :min="1" :max="20" size="small" style="width:80px" controls-position="right" @change="onVehicleCountChange" />
                   <template v-if="!taskForm.external_vehicle">
-                    <el-checkbox v-model="p.external" size="small" @change="onPlanChange">外部</el-checkbox>
                     <el-input-number v-model="p.rental_fee" :min="0" :precision="2" size="small" style="width:110px" controls-position="right" @change="onPlanChange" />
                     <span style="color:#909399;font-size:12px">租车费/台</span>
-                    <el-input-number v-if="!p.external" v-model="p.labor_fee" :min="0" :precision="2" size="small" style="width:100px" controls-position="right" @change="onPlanChange" />
-                    <span v-if="!p.external" style="color:#909399;font-size:12px">差费/台</span>
+                    <el-button v-if="taskForm.capacityPlan.length > 1" type="danger" link size="small" @click="removeCapacityRow(idx)">删除</el-button>
+                    <el-checkbox v-model="p.external" size="small" @change="onPlanChange">外部</el-checkbox>
                   </template>
-                  <el-button v-if="taskForm.capacityPlan.length > 1" type="danger" link size="small" @click="removeCapacityRow(idx)">删除</el-button>
+                  <el-button v-else-if="taskForm.capacityPlan.length > 1" type="danger" link size="small" @click="removeCapacityRow(idx)">删除</el-button>
                 </div>
                 <el-button size="small" plain @click="addCapacityRow">
                   <el-icon><Plus /></el-icon><span style="margin-left:2px">添加车辆</span>
@@ -1217,25 +1216,25 @@ const totalVehicleCount = computed(() => {
 
 // 车辆配置行级费用汇总
 const planSummary = computed(() => {
-  let totalRental = 0, totalLabor = 0, externalRental = 0
+  let totalRental = 0, externalRental = 0
   for (const p of taskForm.value.capacityPlan) {
     const c = p.count || 1
     const rf = p.rental_fee || 0
-    const lf = p.labor_fee || 0
     totalRental += rf * c
     if (p.external) externalRental += rf * c
-    else totalLabor += lf * c
   }
+  // 司机人工费 = 差费标准 × 内部车辆数（recalcLaborFee 计算到 taskForm.labor_fee）
+  const totalLabor = taskForm.value.labor_fee || 0
   const profit = (totalRental - externalRental) + externalRental * 0.1 - totalLabor
   return { totalRental, totalLabor, externalRental, profit }
 })
 
 const onPlanChange = () => {
-  // 行级费用变化：同步任务级汇总字段
+  // 行级配置变化：同步汇总并重算司机人工费
   if (!taskForm.value.external_vehicle && planSummary.value.totalRental > 0) {
     taskForm.value.rental_fee = planSummary.value.totalRental
-    taskForm.value.labor_fee = planSummary.value.totalLabor
   }
+  recalcLaborFee()
 }
 
 const addCapacityRow = () => {
@@ -1710,11 +1709,18 @@ const getRentalDays = () => {
   return Math.ceil(hours / 12) * 0.5
 }
 
+const internalVehicleCount = computed(() => {
+  return taskForm.value.capacityPlan.reduce((sum, p) => {
+    return sum + (p.external ? 0 : (p.count || 0))
+  }, 0)
+})
+
 const recalcLaborFee = () => {
   if (taskForm.value.labor_rate_id) {
     const rate = laborRates.value.find(r => r.id === taskForm.value.labor_rate_id)
     if (rate) {
-      const count = taskForm.value.vehicle_count || 1
+      // 司机人工费 = 差费标准 × 内部车辆数
+      const count = internalVehicleCount.value || (taskForm.value.vehicle_count || 1)
       taskForm.value.labor_fee = rate.labor_rate * Math.ceil(getRentalDays() / rate.days) * count
     }
   }
