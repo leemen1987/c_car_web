@@ -1066,6 +1066,9 @@ def create_task():
     # 按天计费：租车费 = 单价 × 天数（天数未知时为0，完成补录后重算）
     if task.rental_bill_mode == 'daily':
         task.rental_fee = round((task.rental_daily_rate or 0) * (rental_days or 0), 2) if return_time else 0
+    # 按里程计费：租车费待定，完成填起止里程后计算
+    if task.rental_bill_mode == 'mileage':
+        task.rental_fee = 0
     if task.external_vehicle:
         # 外部车辆：费用归零，利润按租车费10%提成
         task.mileage = 0

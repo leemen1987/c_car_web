@@ -386,6 +386,7 @@
               <el-radio-group v-model="taskForm.rental_bill_mode" @change="recalcDailyRentalFee">
                 <el-radio value="fixed">包干总价</el-radio>
                 <el-radio value="daily">按天计费</el-radio>
+                <el-radio value="mileage">按里程计费</el-radio>
               </el-radio-group>
             </el-form-item>
           </el-col>
@@ -397,7 +398,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row v-else :gutter="isMobile ? 0 : 20">
+        <el-row v-else-if="taskForm.rental_bill_mode === 'daily'" :gutter="isMobile ? 0 : 20">
           <el-col :span="isMobile ? 24 : 12">
             <el-form-item label="单价(元/天)">
               <el-input-number v-model="taskForm.rental_daily_rate" :min="0" :precision="2" style="width:100%" @change="recalcDailyRentalFee" />
@@ -407,6 +408,18 @@
             <el-form-item label="预估总价">
               <span v-if="dailyRentalTotal !== null" style="color:#409eff;font-weight:600">¥{{ dailyRentalTotal.toFixed(2) }}</span>
               <span v-else style="color:#909399">待定（回程后计算）</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row v-else :gutter="isMobile ? 0 : 20">
+          <el-col :span="isMobile ? 24 : 12">
+            <el-form-item label="费率(元/km)">
+              <span style="color:#409eff;font-weight:600">{{ mileageRate !== null ? mileageRate + ' 元/km' : '未匹配费率' }}</span>
+            </el-form-item>
+          </el-col>
+          <el-col :span="isMobile ? 24 : 12">
+            <el-form-item label="租车费">
+              <span style="color:#909399">待定（完成任务填起止里程后计算）</span>
             </el-form-item>
           </el-col>
         </el-row>
@@ -562,8 +575,12 @@
         </el-form-item>
         </template>
         <template v-if="isSelfDriveComplete">
-        <el-form-item label="租车费(元)">
+        <el-form-item v-if="currentCompleteTask?.rental_bill_mode !== 'mileage'" label="租车费(元)">
           <el-input-number v-model="completeForm.rental_fee" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        <el-form-item v-else label="租车费(元)">
+          <span style="color:#409eff;font-weight:600">¥{{ mileageRentalFee.toFixed(2) }}</span>
+          <span style="color:#909399;font-size:12px;margin-left:8px">（里程 × 费率{{ mileageRateForTask ? mileageRateForTask + '元/km' : '' }}）</span>
         </el-form-item>
         </template>
         <template v-if="isExternalComplete">
@@ -595,7 +612,7 @@
             <el-input-number v-else v-model="completeForm.start_mileage" :min="0" :precision="0" style="width:100%" />
           </el-form-item>
           <el-form-item label="结束里程(km)">
-            <el-input-number v-model="completeForm.end_mileage" :min="completeForm.start_mileage" :precision="0" style="width:100%" />
+            <el-input-number v-model="completeForm.end_mileage" :min="completeForm.start_mileage" :precision="0" style="width:100%" @change="onEndMileageChange" />
           </el-form-item>
         </template>
         <el-divider />
@@ -1246,6 +1263,25 @@ const showMileageFields = computed(() => {
 const isSelfDriveComplete = computed(() => currentCompleteTask.value?.self_drive || false)
 const isExternalComplete = computed(() => currentCompleteTask.value?.external_vehicle || false)
 
+// 按里程计费：租车费 = (结束里程 - 起始里程) × 费率
+const mileageRateForTask = computed(() => {
+  const task = currentCompleteTask.value
+  if (!task) return null
+  return getFuelRate(task.vehicle_type)
+})
+const mileageRentalFee = computed(() => {
+  const distance = (completeForm.value.end_mileage || 0) - (completeForm.value.start_mileage || 0)
+  const rate = mileageRateForTask.value
+  if (distance > 0 && rate) return Math.round(distance * rate * 100) / 100
+  return 0
+})
+const onEndMileageChange = () => {
+  // 里程计费模式下自动算租车费
+  if (currentCompleteTask.value?.rental_bill_mode === 'mileage') {
+    completeForm.value.rental_fee = mileageRentalFee.value
+  }
+}
+
 const estimatedCost = computed(() => (taskForm.value.fuel_fee + taskForm.value.bridge_fee + taskForm.value.labor_fee).toFixed(2))
 const externalProfit = computed(() => (taskForm.value.rental_fee || 0) * 0.1)
 
@@ -1265,6 +1301,11 @@ const recalcDailyRentalFee = () => {
     taskForm.value.rental_fee = dailyRentalTotal.value
   }
 }
+
+const mileageRate = computed(() => {
+  const rate = getFuelRate(taskForm.value.vehicle_type)
+  return rate !== null ? rate : null
+})
 
 const onExternalVehicleChange = () => {
   if (taskForm.value.external_vehicle) {
@@ -1502,6 +1543,10 @@ const showCompleteDialog = (row) => {
 }
 
 const submitComplete = async () => {
+  // 里程计费模式：提交前按起止里程×费率算租车费
+  if (currentCompleteTask.value?.rental_bill_mode === 'mileage') {
+    completeForm.value.rental_fee = mileageRentalFee.value
+  }
   try {
     await api.post(`/tasks/${completeTaskId.value}/complete`, completeForm.value)
     ElMessage.success('任务已完成')
