@@ -450,6 +450,23 @@ def get_period_bounds(dt):
     return start, end, label
 
 
+def calc_plan_aggregates(plan):
+    """从座位配置行计算汇总：(总租车费, 总司机差费, 外部车费)"""
+    total_rental = 0.0
+    total_labor = 0.0
+    external_rental = 0.0
+    for p in plan:
+        c = int(p.get('count', 1) or 1)
+        rf = float(p.get('rental_fee', 0) or 0)
+        lf = float(p.get('labor_fee', 0) or 0)
+        total_rental += rf * c
+        if p.get('external'):
+            external_rental += rf * c
+        else:
+            total_labor += lf * c
+    return round(total_rental, 2), round(total_labor, 2), round(external_rental, 2)
+
+
 def settlement_range_for_month(month_str):
     """按结算月份(YYYY-MM)返回结算周期 (start_date, end_date)
     结算月份指周期结束所在月：2026-08 → 2026-07-26 ~ 2026-08-25
@@ -1029,6 +1046,7 @@ def create_task():
     vehicle_count = data.get('vehicle_count', 1)
     vehicle_type = data.get('vehicle_type', '')
     capacity_plan_json = ''
+    plan_rental, plan_labor, plan_external = 0, 0, 0
     if capacity_plan:
         # 过滤无效行
         capacity_plan = [p for p in capacity_plan if p.get('vehicle_type') and int(p.get('count', 0) or 0) > 0]
@@ -1036,6 +1054,7 @@ def create_task():
             vehicle_count = sum(int(p['count']) for p in capacity_plan)
             vehicle_type = '、'.join(f"{p['vehicle_type']}×{p['count']}" for p in capacity_plan)
             capacity_plan_json = json.dumps(capacity_plan, ensure_ascii=False)
+            plan_rental, plan_labor, plan_external = calc_plan_aggregates(capacity_plan)
 
     task = Task(
         client_type=client_type,
@@ -1056,10 +1075,11 @@ def create_task():
         rental_bill_mode=data.get('rental_bill_mode', 'fixed'),
         rental_daily_rate=data.get('rental_daily_rate', 0),
         mileage=data.get('mileage', 0),
-        rental_fee=data.get('rental_fee', 0),
+        rental_fee=plan_rental if plan_rental else data.get('rental_fee', 0),
         fuel_fee=data.get('fuel_fee', 0),
         bridge_fee=data.get('bridge_fee', 0),
-        labor_fee=data.get('labor_fee', 0),
+        labor_fee=plan_labor if plan_labor else data.get('labor_fee', 0),
+        external_rental=plan_external,
         remark=data.get('remark', ''),
         status='pending'
     )
@@ -1070,16 +1090,19 @@ def create_task():
     if task.rental_bill_mode == 'mileage':
         task.rental_fee = 0
     if task.external_vehicle:
-        # 外部车辆：费用归零，利润按租车费10%提成
+        # 全部外部车辆：费用归零，利润按租车费10%提成
         task.mileage = 0
         task.fuel_fee = 0
         task.bridge_fee = 0
         task.labor_fee = 0
+        task.external_rental = task.rental_fee
         task.estimated_cost = round((task.rental_fee or 0) * 0.9, 2)
         task.estimated_profit = round((task.rental_fee or 0) * 0.1, 2)
     else:
-        task.estimated_cost = task.fuel_fee + task.bridge_fee + task.labor_fee
-        task.estimated_profit = task.rental_fee - task.estimated_cost
+        # 内部/混合：内部车费-成本 + 外部车费10%提成
+        task.estimated_cost = (task.fuel_fee or 0) + (task.bridge_fee or 0) + (task.labor_fee or 0)
+        internal_rental = (task.rental_fee or 0) - (task.external_rental or 0)
+        task.estimated_profit = round(internal_rental + (task.external_rental or 0) * 0.1 - task.estimated_cost, 2)
     db.session.add(task)
     db.session.flush()
     # 自动生成任务编号：TASK-YYYYMMDD-ID
@@ -1188,13 +1211,14 @@ def update_task(task_id):
             task.labor_fee = 0
 
     # 重算预计成本和预估利润（费用字段可能被修改）
-    if any(f in data for f in ('rental_fee', 'fuel_fee', 'bridge_fee', 'labor_fee', 'external_vehicle')):
+    if any(f in data for f in ('rental_fee', 'fuel_fee', 'bridge_fee', 'labor_fee', 'external_vehicle', 'capacity_plan')):
         if task.external_vehicle:
             task.estimated_cost = round((task.rental_fee or 0) * 0.9, 2)
             task.estimated_profit = round((task.rental_fee or 0) * 0.1, 2)
         else:
             task.estimated_cost = (task.fuel_fee or 0) + (task.bridge_fee or 0) + (task.labor_fee or 0)
-            task.estimated_profit = (task.rental_fee or 0) - task.estimated_cost
+            internal_rental = (task.rental_fee or 0) - (task.external_rental or 0)
+            task.estimated_profit = round(internal_rental + (task.external_rental or 0) * 0.1 - task.estimated_cost, 2)
 
     if change_list:
         # Take snapshot AFTER applying changes
@@ -1230,6 +1254,12 @@ def update_task(task_id):
             task.capacity_plan = json.dumps(capacity_plan, ensure_ascii=False)
             task.vehicle_count = sum(int(p['count']) for p in capacity_plan)
             task.vehicle_type = '、'.join(f"{p['vehicle_type']}×{p['count']}" for p in capacity_plan)
+            # 汇总行级费用
+            plan_rental, plan_labor, plan_external = calc_plan_aggregates(capacity_plan)
+            if plan_rental or plan_labor or plan_external:
+                task.rental_fee = plan_rental
+                task.labor_fee = plan_labor
+                task.external_rental = plan_external
 
     if 'remark' in data:
         task.remark = data['remark']
@@ -1459,15 +1489,18 @@ def complete_task(task_id):
 
     # 计算成本和利润
     if task.external_vehicle:
-        # 外部车辆：利润 = 租车费 × 10% − 其他费用
+        # 全部外部车辆：利润 = 租车费 × 10% − 其他费用
         task.actual_fuel_fee = 0
         task.actual_bridge_fee = 0
         task.actual_labor_fee = 0
         task.final_profit = round((task.rental_fee or 0) * 0.1 - (task.other_fee or 0), 2)
         task.actual_cost = round((task.rental_fee or 0) - task.final_profit, 2)
     else:
+        # 内部/混合：内部车费 − 实际成本 + 外部车费×10%
+        ext_rental = task.external_rental or 0
+        internal_rental = (task.rental_fee or 0) - ext_rental
         task.actual_cost = task.actual_fuel_fee + task.actual_bridge_fee + task.actual_labor_fee + task.other_fee
-        task.final_profit = task.rental_fee - task.actual_cost
+        task.final_profit = round(internal_rental + ext_rental * 0.1 - task.actual_cost, 2)
 
     # 处理里程数（外部车辆跳过）
     if not task.external_vehicle:
@@ -3044,6 +3077,7 @@ def init_db():
         ('edit_reason', "TEXT"),
         ('rental_bill_mode', "VARCHAR(10) DEFAULT 'fixed'"),
         ('rental_daily_rate', "FLOAT DEFAULT 0"),
+        ('external_rental', "FLOAT DEFAULT 0"),
         ('start_mileage', "FLOAT DEFAULT 0"),
         ('end_mileage', "FLOAT DEFAULT 0"),
         ('vehicle_count', "INT DEFAULT 1"),

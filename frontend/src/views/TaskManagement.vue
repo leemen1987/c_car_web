@@ -324,19 +324,35 @@
           <el-col :span="24">
             <el-form-item label="车辆配置">
               <div style="width:100%">
-                <div v-for="(p, idx) in taskForm.capacityPlan" :key="idx" style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
-                  <el-select v-model="p.vehicle_type" placeholder="核定载人数" style="width:130px" filterable allow-create @change="recalcFuelFee">
+                <div v-for="(p, idx) in taskForm.capacityPlan" :key="idx" style="display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap">
+                  <el-select v-model="p.vehicle_type" placeholder="核定载人数" style="width:110px" filterable allow-create @change="recalcFuelFee">
                     <el-option v-for="t in vehicleTypes" :key="t" :label="t" :value="t" />
                   </el-select>
                   <span style="color:#909399;font-size:13px">× </span>
-                  <el-input-number v-model="p.count" :min="1" :max="20" size="small" style="width:90px" controls-position="right" @change="onVehicleCountChange" />
+                  <el-input-number v-model="p.count" :min="1" :max="20" size="small" style="width:80px" controls-position="right" @change="onVehicleCountChange" />
+                  <template v-if="!taskForm.external_vehicle">
+                    <el-checkbox v-model="p.external" size="small" @change="onPlanChange">外部</el-checkbox>
+                    <el-input-number v-model="p.rental_fee" :min="0" :precision="2" size="small" style="width:110px" controls-position="right" @change="onPlanChange" />
+                    <span style="color:#909399;font-size:12px">租车费/台</span>
+                    <el-input-number v-if="!p.external" v-model="p.labor_fee" :min="0" :precision="2" size="small" style="width:100px" controls-position="right" @change="onPlanChange" />
+                    <span v-if="!p.external" style="color:#909399;font-size:12px">差费/台</span>
+                  </template>
                   <el-button v-if="taskForm.capacityPlan.length > 1" type="danger" link size="small" @click="removeCapacityRow(idx)">删除</el-button>
                 </div>
                 <el-button size="small" plain @click="addCapacityRow">
                   <el-icon><Plus /></el-icon><span style="margin-left:2px">添加车辆</span>
                 </el-button>
                 <span style="margin-left:12px;color:#909399;font-size:13px">共 {{ totalVehicleCount }} 台车</span>
-                <el-checkbox v-model="taskForm.external_vehicle" style="margin-left:16px" @change="onExternalVehicleChange">外部车辆（10%提成）</el-checkbox>
+                <el-checkbox v-model="taskForm.external_vehicle" style="margin-left:16px" @change="onExternalVehicleChange">全部外部车辆（10%提成）</el-checkbox>
+                <!-- 费用汇总条 -->
+                <div v-if="!taskForm.external_vehicle && planSummary.totalRental > 0" style="margin-top:10px;padding:8px 12px;background:#f0f7ff;border-radius:6px;font-size:13px;color:#303133">
+                  总租车费 <strong>¥{{ planSummary.totalRental.toFixed(2) }}</strong>
+                  <template v-if="planSummary.externalRental > 0">
+                    （外部车费 ¥{{ planSummary.externalRental.toFixed(2) }}，提成 <strong style="color:#e6a23c">¥{{ (planSummary.externalRental * 0.1).toFixed(2) }}</strong>）
+                  </template>
+                  ｜ 差费合计 <strong>¥{{ planSummary.totalLabor.toFixed(2) }}</strong>
+                  ｜ 预估利润 <strong :style="{ color: planSummary.profit >= 0 ? '#67c23a' : '#f56c6c' }">¥{{ planSummary.profit.toFixed(2) }}</strong>
+                </div>
               </div>
             </el-form-item>
           </el-col>
@@ -542,6 +558,7 @@
         <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
           <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
           <el-tag v-if="a.capacity" size="small" type="warning" style="flex-shrink:0">{{ a.capacity }}</el-tag>
+          <el-tag v-if="a.external" size="small" type="danger" style="flex-shrink:0">外部</el-tag>
           <el-select v-model="a.vehicle_id" :placeholder="a.capacity ? '选择' + a.capacity + '车辆' : '选择车辆'" style="flex:1" filterable>
             <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id">
               <span>{{ v.plate_number }}{{ v.capacity ? ' (' + v.capacity + ')' : '' }}</span>
@@ -1189,7 +1206,7 @@ const canSubmitApproval = (row) => {
 const taskForm = ref({
   client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null,
   departure: '', destination: '', departure_time: '', return_time: '',
-  vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1 }],
+  vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1, external: false, rental_fee: 0, labor_fee: 0 }],
   self_drive: false, external_vehicle: false, rental_bill_mode: 'fixed', rental_daily_rate: 0, mileage: 0, rental_fee: 0,
   fuel_fee: 0, bridge_fee: 0, labor_fee: 0, remark: ''
 })
@@ -1198,8 +1215,31 @@ const totalVehicleCount = computed(() => {
   return taskForm.value.capacityPlan.reduce((sum, p) => sum + (p.count || 0), 0)
 })
 
+// 车辆配置行级费用汇总
+const planSummary = computed(() => {
+  let totalRental = 0, totalLabor = 0, externalRental = 0
+  for (const p of taskForm.value.capacityPlan) {
+    const c = p.count || 1
+    const rf = p.rental_fee || 0
+    const lf = p.labor_fee || 0
+    totalRental += rf * c
+    if (p.external) externalRental += rf * c
+    else totalLabor += lf * c
+  }
+  const profit = (totalRental - externalRental) + externalRental * 0.1 - totalLabor
+  return { totalRental, totalLabor, externalRental, profit }
+})
+
+const onPlanChange = () => {
+  // 行级费用变化：同步任务级汇总字段
+  if (!taskForm.value.external_vehicle && planSummary.value.totalRental > 0) {
+    taskForm.value.rental_fee = planSummary.value.totalRental
+    taskForm.value.labor_fee = planSummary.value.totalLabor
+  }
+}
+
 const addCapacityRow = () => {
-  taskForm.value.capacityPlan.push({ vehicle_type: '', count: 1 })
+  taskForm.value.capacityPlan.push({ vehicle_type: '', count: 1, external: false, rental_fee: 0, labor_fee: 0 })
   onVehicleCountChange()
 }
 
@@ -1331,8 +1371,11 @@ const finalProfitDisplay = computed(() => {
     return ((completeForm.value.rental_fee || 0) * 0.1 - (completeForm.value.other_fee || 0)).toFixed(2)
   }
   const task = tasks.value.find(t => t.id === completeTaskId.value)
-  const rental = task ? task.rental_fee : 0
-  return (rental - completeForm.value.actual_fuel_fee - completeForm.value.actual_bridge_fee - completeForm.value.actual_labor_fee - completeForm.value.other_fee).toFixed(2)
+  const rental = task ? (task.rental_fee || 0) : 0
+  const extRental = task ? (task.external_rental || 0) : 0
+  const internalRental = rental - extRental
+  const cost = completeForm.value.actual_fuel_fee + completeForm.value.actual_bridge_fee + completeForm.value.actual_labor_fee + completeForm.value.other_fee
+  return (internalRental + extRental * 0.1 - cost).toFixed(2)
 })
 
 const fieldMap = { client_name: '用车联系人', client_phone: '联系电话', departure: '出发地点', destination: '目的地', departure_time: '出车时间', return_time: '回程时间', vehicle_type: '核定载人数', mileage: '任务里程', rental_fee: '租车费', fuel_fee: '油电费', bridge_fee: '桥路费', labor_fee: '司机人工费' }
@@ -1348,7 +1391,7 @@ const loadTasks = async () => {
 const showAddDialog = () => {
   isEdit.value = false
   editId.value = null
-  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1 }], self_drive: false, external_vehicle: false, rental_bill_mode: 'fixed', rental_daily_rate: 0, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
+  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1, external: false, rental_fee: 0, labor_fee: 0 }], self_drive: false, external_vehicle: false, rental_bill_mode: 'fixed', rental_daily_rate: 0, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
   taskDialogVisible.value = true
 }
 
@@ -1359,7 +1402,7 @@ const showEditDialog = (row) => {
   editReason.value = ''
   const matchedRate = laborRates.value.find(r => r.location === row.destination)
   const plan = (row.capacity_plan && row.capacity_plan.length)
-    ? row.capacity_plan.map(p => ({ vehicle_type: p.vehicle_type, count: p.count }))
+    ? row.capacity_plan.map(p => ({ vehicle_type: p.vehicle_type, count: p.count, external: p.external || false, rental_fee: p.rental_fee || 0, labor_fee: p.labor_fee || 0 }))
     : [{ vehicle_type: row.vehicle_type || '', count: row.vehicle_count || 1 }]
   taskForm.value = {
     client_type: row.client_type || 'personal', client_name: row.client_name, client_phone: row.client_phone || '',
@@ -1431,7 +1474,7 @@ const showScheduleDialog = async (row) => {
   for (const p of plan) {
     const c = p.count || 1
     for (let i = 0; i < c; i++) {
-      slots.push({ vehicle_id: null, driver_id: null, capacity: p.vehicle_type || '' })
+      slots.push({ vehicle_id: null, driver_id: null, capacity: p.vehicle_type || '', external: p.external || false })
     }
   }
   scheduleAssignments.value = slots
@@ -1459,11 +1502,13 @@ const getAvailableVehicles = (currentIdx) => {
   const selectedIds = scheduleAssignments.value
     .map((a, idx) => idx !== currentIdx ? a.vehicle_id : null)
     .filter(Boolean)
-  const slotCapacity = scheduleAssignments.value[currentIdx]?.capacity
-  const isExt = currentScheduleTask.value?.external_vehicle
+  const slot = scheduleAssignments.value[currentIdx]
+  const slotCapacity = slot?.capacity
+  // 行级 external 优先（混合任务），否则按任务级整单外部
+  const isExt = slot?.external !== undefined ? slot.external : (currentScheduleTask.value?.external_vehicle || false)
   return scheduleInfo.value.vehicles.filter(v => {
     if (selectedIds.includes(v.id)) return false
-    // 内外部车辆严格区分：外部任务只显示外部公司车辆，内部任务只显示三大公司车辆
+    // 内外部车辆严格区分：外部槽位只显示外部公司车辆，内部槽位只显示三大公司车辆
     const co = (v.company || '').trim()
     if (isExt ? INTERNAL_COMPANIES.includes(co) : !INTERNAL_COMPANIES.includes(co)) return false
     // 槽位指定座位数时优先匹配相同座位数的车辆
