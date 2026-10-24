@@ -1332,7 +1332,7 @@ def get_available_resources(task_id):
         return jsonify({'code': 404, 'msg': '任务不存在'})
 
     task_start = task.departure_time
-    task_end = task_start + timedelta(days=task.rental_days)
+    task_end = task.return_time if task.return_time else task_start + timedelta(days=task.rental_days or 1)
 
     # Find vehicles that are busy during this time period
     busy_vehicle_ids = set()
@@ -1430,7 +1430,7 @@ def schedule_task(task_id):
 
     # 验证时间冲突
     task_start = task.departure_time
-    task_end = task_start + timedelta(days=task.rental_days)
+    task_end = task.return_time if task.return_time else task_start + timedelta(days=task.rental_days or 1)
     is_self_drive = task.self_drive or False
 
     # 外部车辆同样选择车辆和司机，走统一逻辑（允许重叠排班）

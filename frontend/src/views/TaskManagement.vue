@@ -514,7 +514,7 @@
     <el-dialog v-model="scheduleDialogVisible" title="排班分配" :width="isMobile ? '100%' : '700px'" :fullscreen="isMobile">
       <el-form :label-width="isMobile ? '90px' : '100px'">
         <el-form-item label="出车时间">
-          <el-input :model-value="scheduleInfo.task_start + ' ~ ' + scheduleInfo.task_end" disabled />
+          <el-input :model-value="scheduleInfo.task_start + ' ~ ' + (currentScheduleTask?.return_time ? scheduleInfo.task_end : '待定')" disabled />
         </el-form-item>
         <template v-if="!currentScheduleTask?.self_drive">
         <el-form-item label="目的地">
