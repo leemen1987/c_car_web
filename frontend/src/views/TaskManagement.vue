@@ -1776,7 +1776,7 @@ const onLocationChange = async () => {
     if (res.code === 200 && res.data) {
       singleDistance.value = res.data.distance
       singleTolls.value = res.data.tolls
-      const count = taskForm.value.vehicle_count || 1
+      const count = totalVehicleCount.value || 1
       const multiplier = getMileageMultiplier(singleDistance.value)
       const mileage = Math.round(singleDistance.value * 2 * (1 + multiplier / 100) * 10) / 10
       taskForm.value.mileage = Math.round(mileage * count * 10) / 10
@@ -1793,7 +1793,7 @@ const onLocationChange = async () => {
 
 const onVehicleCountChange = () => {
   if (singleDistance.value > 0) {
-    const count = taskForm.value.vehicle_count || 1
+    const count = totalVehicleCount.value || 1
     const multiplier = getMileageMultiplier(singleDistance.value)
     const mileage = Math.round(singleDistance.value * 2 * (1 + multiplier / 100) * 10) / 10
     taskForm.value.mileage = Math.round(mileage * count * 10) / 10
