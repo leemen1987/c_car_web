@@ -27,7 +27,7 @@
       </template>
 
       <!-- Desktop table -->
-      <el-table v-if="!isMobile" :data="filteredTasks" border stripe style="width:100%" max-height="600" :header-cell-style="{ whiteSpace: 'nowrap' }">
+      <el-table v-if="!isMobile" :data="filteredTasks" border stripe style="width:100%" :max-height="tableHeight" :header-cell-style="{ whiteSpace: 'nowrap' }">
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
@@ -1041,7 +1041,11 @@ const route = useRoute()
 
 const isMobile = ref(false)
 const checkMobile = () => { isMobile.value = window.innerWidth <= 768 }
-onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile) })
+const tableHeight = ref(500)
+const updateTableHeight = () => {
+  tableHeight.value = Math.max(320, window.innerHeight - 225)
+}
+onMounted(() => { checkMobile(); updateTableHeight(); window.addEventListener('resize', () => { checkMobile(); updateTableHeight() }) })
 onUnmounted(() => window.removeEventListener('resize', checkMobile))
 
 const tasks = ref([])

@@ -77,7 +77,7 @@
             </el-descriptions-item>
           </el-descriptions>
 
-          <el-table :data="clientTasks" border stripe max-height="400">
+          <el-table :data="clientTasks" border stripe :max-height="tableHeight">
             <el-table-column type="index" label="序号" width="60" align="center" />
             <el-table-column label="包车类型" width="90" align="center">
               <template #default="{ row }">
@@ -403,7 +403,7 @@
             </el-form-item>
           </el-form>
 
-          <el-table :data="reconTasks" border stripe size="small" max-height="480">
+          <el-table :data="reconTasks" border stripe size="small" :max-height="tableHeight">
             <el-table-column prop="month_label" label="月份" width="70" align="center" />
             <el-table-column label="用车单位/个人" min-width="140">
               <template #default="{ row }">{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</template>
@@ -468,7 +468,7 @@
             </el-form-item>
           </el-form>
 
-          <el-table :data="extReconTasks" border stripe size="small" max-height="480">
+          <el-table :data="extReconTasks" border stripe size="small" :max-height="tableHeight">
             <el-table-column prop="month_label" label="月份" width="70" align="center" />
             <el-table-column label="用车单位/个人" min-width="140">
               <template #default="{ row }">{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</template>
@@ -582,7 +582,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import api from '../utils/api'
@@ -591,6 +591,10 @@ import * as XLSX from 'xlsx-js-style'
 const router = useRouter()
 const activeTab = ref('client')
 const showSearch = ref(true)
+const tableHeight = ref(400)
+const updateTableHeight = () => {
+  tableHeight.value = Math.max(300, window.innerHeight - (showSearch.value ? 275 : 205))
+}
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
 const canEdit = () => user.value.role === 'admin' || (user.value.permissions || []).includes('report_edit')
 
@@ -963,7 +967,11 @@ const exportVehicle = () => {
   exportToExcel(allRows, vehicleCols, '按车辆报表')
 }
 
+watch(showSearch, () => nextTick(updateTableHeight))
+
 onMounted(async () => {
+  updateTableHeight()
+  window.addEventListener('resize', updateTableHeight)
   try {
     const [drvRes, vehRes, cliRes] = await Promise.all([api.get('/drivers'), api.get('/vehicles'), api.get('/clients')])
     allDrivers.value = drvRes.data
