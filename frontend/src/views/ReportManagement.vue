@@ -49,7 +49,9 @@
               </el-select>
             </el-form-item>
             <el-form-item label="用车单位">
-              <el-input v-model="clientQuery.client" placeholder="输入单位名称" clearable />
+              <el-select v-model="clientQuery.client" placeholder="选择或输入" clearable filterable allow-create default-first-option style="width:200px">
+                <el-option v-for="n in reconClientOptions" :key="n" :label="n" :value="n" />
+              </el-select>
             </el-form-item>
             <el-form-item label="月份">
               <el-date-picker v-model="clientQuery.month" type="month" format="YYYY-MM" value-format="YYYY-MM" placeholder="选择月份" clearable />
@@ -831,8 +833,16 @@ onMounted(async () => {
     const [drvRes, vehRes, cliRes] = await Promise.all([api.get('/drivers'), api.get('/vehicles'), api.get('/clients')])
     allDrivers.value = drvRes.data
     allVehicles.value = vehRes.data
-    // 客户对账下拉选项：单位列表
-    reconClientOptions.value = (cliRes.data || []).map(c => c.name).filter(Boolean)
+    // 下拉选项：单位 + 已有任务中的单位/个人名称
+    const names = new Set((cliRes.data || []).map(c => c.name).filter(Boolean))
+    try {
+      const taskRes = await api.get('/reports/by-client')
+      for (const t of (taskRes.data.tasks || [])) {
+        const n = t.client_type === 'company' ? (t.client_company || t.client_name) : t.client_name
+        if (n) names.add(n)
+      }
+    } catch (e) {}
+    reconClientOptions.value = [...names].sort()
   } catch (e) {}
 })
 </script>

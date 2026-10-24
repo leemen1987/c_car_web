@@ -1978,7 +1978,10 @@ def report_by_client():
     elif client_type:
         query = query.filter(Task.client_type == client_type)
     if client:
-        query = query.filter(Task.client_name.like(f'%{client}%'))
+        query = query.filter(db.or_(
+            Task.client_name.like(f'%{client}%'),
+            Task.client.has(Client.name.like(f'%{client}%'))
+        ))
     if paid_method:
         query = query.filter(Task.paid_method == paid_method)
     if is_paid == '1':
