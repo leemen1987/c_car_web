@@ -165,7 +165,7 @@
               <el-button v-if="row.status === 'scheduled'" type="warning" size="small" @click="showScheduleDialog(row)">重新排班</el-button>
               <el-button v-if="row.status === 'scheduled'" type="success" size="small" :disabled="!isPastReturn(row)" @click="showCompleteDialog(row)">完成</el-button>
               <el-button v-if="row.status === 'pending' || row.status === 'scheduled'" type="danger" size="small" plain @click="showCancelDialog(row)">取消</el-button>
-              <el-button v-if="(row.status === 'completed' || row.status === 'cancelled') && row.change_log && row.change_log.length" type="info" size="small" @click="showChangeLog(row)">变更记录</el-button>
+              <el-button v-if="(row.status === 'completed' || row.status === 'cancelled') && row.has_change_log" type="info" size="small" @click="showChangeLog(row)">变更记录</el-button>
               <el-button v-if="row.edit_reason" type="danger" size="small" plain @click="showEditReason(row)">已修改</el-button>
               <el-dropdown trigger="click">
                 <el-button size="small" type="info" plain>更多 <el-icon style="margin-left:2px"><ArrowDown /></el-icon></el-button>
@@ -174,7 +174,7 @@
                     <el-dropdown-item v-if="row.status === 'scheduled' && !row.schedule_confirm_status" @click="pushConfirm(row)">推送确认</el-dropdown-item>
                     <el-dropdown-item v-if="row.schedule_confirm_status" @click="showConfirmDetail(row)">确认详情</el-dropdown-item>
                     <el-dropdown-item v-if="row.status === 'completed'" @click="showInvoiceDialog(row)">录入发票</el-dropdown-item>
-                    <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled' && row.change_log && row.change_log.length" @click="showChangeLog(row)">变更记录</el-dropdown-item>
+                    <el-dropdown-item v-if="row.status !== 'completed' && row.status !== 'cancelled' && row.has_change_log" @click="showChangeLog(row)">变更记录</el-dropdown-item>
                     <el-dropdown-item v-if="row.status !== 'cancelled'" @click="showEditDialog(row)">编辑</el-dropdown-item>
                     <el-dropdown-item divided>
                       <span style="color:#f56c6c;width:100%;display:block" @click="confirmDelete(row.id)">删除</span>
@@ -258,7 +258,7 @@
                   <el-dropdown-item v-if="row.schedule_confirm_status" @click="showConfirmDetail(row)">确认详情</el-dropdown-item>
                   <el-dropdown-item v-if="row.status === 'completed'" @click="showInvoiceDialog(row)">录入发票</el-dropdown-item>
                   <el-dropdown-item v-if="row.status !== 'cancelled'" @click="showEditDialog(row)">编辑</el-dropdown-item>
-                  <el-dropdown-item v-if="row.change_log && row.change_log.length" @click="showChangeLog(row)">变更记录</el-dropdown-item>
+                  <el-dropdown-item v-if="row.has_change_log" @click="showChangeLog(row)">变更记录</el-dropdown-item>
                   <el-dropdown-item divided>
                     <span style="color:#f56c6c;width:100%;display:block" @click="confirmDelete(row.id)">删除</span>
                   </el-dropdown-item>
@@ -1032,7 +1032,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
 import api from '../utils/api'
@@ -1118,15 +1118,8 @@ const saveFuelRates = async () => {
 }
 
 const filteredTasks = computed(() => {
-  let list
-  if (statusFilter.value === 'all') {
-    list = tasks.value
-  } else if (statusFilter.value) {
-    list = tasks.value.filter(t => t.status === statusFilter.value)
-  } else {
-    list = tasks.value.filter(t => t.status !== 'cancelled')
-  }
-  // 按出车日期筛选
+  let list = tasks.value
+  // 按出车日期筛选（状态已由服务端过滤）
   if (dateRange.value && dateRange.value.length === 2) {
     const [start, end] = dateRange.value
     list = list.filter(t => {
@@ -1137,6 +1130,7 @@ const filteredTasks = computed(() => {
   }
   return list
 })
+watch(statusFilter, () => loadTasks())
 const laborRates = ref([])
 const clients = ref([])
 const vehicles = ref([])
@@ -1386,7 +1380,13 @@ const isChanged = (log, key) => (log.changes || []).some(c => c.field === fieldM
 
 const loadTasks = async () => {
   try {
-    const res = await api.get('/tasks')
+    const params = {}
+    if (statusFilter.value === '') {
+      params.status = 'active'
+    } else if (statusFilter.value !== 'all') {
+      params.status = statusFilter.value
+    }
+    const res = await api.get('/tasks', { params })
     tasks.value = res.data
   } catch (e) {}
 }
@@ -1622,14 +1622,22 @@ const confirmDelete = async (id) => {
   } catch (e) {}
 }
 
-const showChangeLog = (row) => {
-  currentChangeLog.value = row.change_log || []
-  changeLogVisible.value = true
+const showChangeLog = async (row) => {
+  try {
+    const res = await api.get(`/tasks/${row.id}/change-log`)
+    currentChangeLog.value = res.data || []
+    changeLogVisible.value = true
+  } catch (e) {}
 }
 
-const showEditReason = (row) => {
+const showEditReason = async (row) => {
   editReasonRow.value = row
-  currentChangeLog.value = row.change_log || []
+  try {
+    const res = await api.get(`/tasks/${row.id}/change-log`)
+    currentChangeLog.value = res.data || []
+  } catch (e) {
+    currentChangeLog.value = []
+  }
   editReasonVisible.value = true
 }
 

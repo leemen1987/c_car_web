@@ -236,7 +236,7 @@ class Task(db.Model):
 
     vehicle = db.relationship('Vehicle', backref='tasks')
     driver = db.relationship('Driver', backref='tasks')
-    task_vehicles = db.relationship('TaskVehicle', backref='task', cascade='all,delete-orphan', lazy='dynamic')
+    task_vehicles = db.relationship('TaskVehicle', backref='task', cascade='all,delete-orphan', lazy='selectin')
 
     def get_capacity_plan(self):
         """解析座位数配置，无配置时回退到单一座位数+数量"""
@@ -337,7 +337,7 @@ class Task(db.Model):
             'yzj_approval_status': getattr(self, 'yzj_approval_status', ''),
             'yzj_serial': getattr(self, 'yzj_serial', ''),
             'schedule_confirm_status': self.schedule_confirm_status or '',
-            'change_log': self.get_change_log(),
+            'has_change_log': bool(self.change_log and self.change_log != '[]'),
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None,
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None
         }

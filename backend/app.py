@@ -14,6 +14,7 @@ import base64
 import urllib.request
 import urllib.parse
 import urllib.error
+from sqlalchemy.orm import selectinload
 from utils.wx_work import WxWorkClient, format_confirm_message, format_external_confirm_message, get_userinfo_by_code, get_user_detail
 
 def decrypt_yzj_callback(encrypted_data, developer_key):
@@ -1004,8 +1005,36 @@ def delete_contact(client_id, contact_id):
 @app.route('/api/tasks', methods=['GET'])
 @login_required
 def list_tasks():
-    tasks = Task.query.order_by(Task.created_at.desc()).all()
+    status = request.args.get('status', '')
+    limit = request.args.get('limit', 0, type=int)
+
+    query = Task.query.options(
+        selectinload(Task.task_vehicles).selectinload(TaskVehicle.vehicle),
+        selectinload(Task.task_vehicles).selectinload(TaskVehicle.driver),
+        selectinload(Task.vehicle),
+        selectinload(Task.driver),
+        selectinload(Task.client),
+        selectinload(Task.contact),
+    )
+    if status == 'active':
+        query = query.filter(Task.status.in_(['pending', 'scheduled']))
+    elif status and status != 'all':
+        query = query.filter(Task.status == status)
+
+    query = query.order_by(Task.departure_time.desc(), Task.created_at.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    tasks = query.all()
     return jsonify({'code': 200, 'data': [t.to_dict() for t in tasks]})
+
+
+@app.route('/api/tasks/<int:task_id>/change-log', methods=['GET'])
+@login_required
+def get_task_change_log(task_id):
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'code': 404, 'msg': '任务不存在'}), 404
+    return jsonify({'code': 200, 'data': task.get_change_log()})
 
 
 def calc_rental_days(departure_time, return_time):
