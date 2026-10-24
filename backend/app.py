@@ -2153,6 +2153,51 @@ def report_by_vehicle():
     })
 
 
+@app.route('/api/reports/by-external-company', methods=['GET'])
+@login_required
+def report_by_external_company():
+    """外部用车对账：按外部车属单位查询已完成任务"""
+    company = request.args.get('company', '').strip()
+    month = request.args.get('month', '')
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+
+    if not company:
+        return jsonify({'code': 400, 'msg': '请选择车属单位'})
+
+    # 该公司车辆ID
+    vehicle_ids = [v.id for v in Vehicle.query.filter(Vehicle.company == company).all()]
+    if not vehicle_ids:
+        return jsonify({'code': 200, 'data': {'tasks': []}})
+
+    # 有该公司车辆分配的任务
+    tv = TaskVehicle.query.filter(TaskVehicle.vehicle_id.in_(vehicle_ids)).all()
+    task_ids = list({t.task_id for t in tv})
+
+    query = Task.query.filter(
+        Task.id.in_(task_ids) if task_ids else Task.id == -1,
+        Task.status == 'completed'
+    )
+    if month:
+        query = query.filter(db.func.date_format(Task.departure_time, '%Y-%m') == month)
+    if start_date:
+        query = query.filter(Task.departure_time >= start_date)
+    if end_date:
+        query = query.filter(Task.departure_time <= end_date + ' 23:59:59')
+
+    tasks = query.order_by(Task.departure_time.desc()).all()
+    task_list = []
+    for t in tasks:
+        d = t.to_dict()
+        # 该公司分配的车辆/司机
+        unit_vehicles = [x for x in (t.task_vehicles or []) if x.vehicle and x.vehicle.company == company]
+        d['unit_plates'] = [x.vehicle.plate_number for x in unit_vehicles if x.vehicle]
+        d['unit_drivers'] = [x.driver.name for x in unit_vehicles if x.driver]
+        task_list.append(d)
+
+    return jsonify({'code': 200, 'data': {'tasks': task_list}})
+
+
 # ==================== 企业微信外部联系人 ====================
 
 @app.route('/api/wx-external-contacts', methods=['GET'])

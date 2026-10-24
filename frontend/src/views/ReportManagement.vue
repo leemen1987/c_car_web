@@ -446,6 +446,73 @@
             <span>金额合计 <strong style="color:#409eff">¥{{ reconTotals.total.toFixed(2) }}</strong></span>
           </div>
         </el-tab-pane>
+
+        <!-- 外部用车对账 -->
+        <el-tab-pane label="外部用车对账" name="external">
+          <el-form v-show="showSearch" :inline="true" style="margin-bottom:15px">
+            <el-form-item label="车属单位">
+              <el-select v-model="extReconQuery.company" placeholder="选择外部车属单位" clearable filterable style="width:200px">
+                <el-option v-for="n in extCompanies" :key="n" :label="n" :value="n" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="月份">
+              <el-date-picker v-model="extReconQuery.month" type="month" format="YYYY-MM" value-format="YYYY-MM" placeholder="选择月份" clearable />
+            </el-form-item>
+            <el-form-item label="日期区间">
+              <el-date-picker v-model="extReconQuery.dateRange" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
+                start-placeholder="开始日期" end-placeholder="结束日期" clearable />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="queryExternalRecon">查询</el-button>
+              <el-button type="success" :disabled="!extReconTasks.length" @click="exportExternalRecon">导出对账单</el-button>
+            </el-form-item>
+          </el-form>
+
+          <el-table :data="extReconTasks" border stripe size="small" max-height="480">
+            <el-table-column prop="month_label" label="月份" width="70" align="center" />
+            <el-table-column label="用车单位/个人" min-width="140">
+              <template #default="{ row }">{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</template>
+            </el-table-column>
+            <el-table-column prop="departure" label="出发地点" min-width="90" />
+            <el-table-column label="目的地" min-width="90">
+              <template #default="{ row }">{{ row.self_drive ? '自驾' : (row.destination || '-') }}</template>
+            </el-table-column>
+            <el-table-column label="车牌号" min-width="100">
+              <template #default="{ row }">{{ row.unit_plates && row.unit_plates.length ? row.unit_plates.join('、') : (row.vehicle_plate || '-') }}</template>
+            </el-table-column>
+            <el-table-column label="驾驶司机" min-width="80">
+              <template #default="{ row }">{{ row.unit_drivers && row.unit_drivers.length ? row.unit_drivers.join('、') : (row.self_drive ? '自驾' : (row.driver_name || '-')) }}</template>
+            </el-table-column>
+            <el-table-column label="出车时间" width="140">
+              <template #default="{ row }">{{ row.departure_time }}</template>
+            </el-table-column>
+            <el-table-column label="收车时间" width="140">
+              <template #default="{ row }">{{ row.return_time || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="租用天数" width="80" align="center">
+              <template #default="{ row }">{{ row.rental_days }}天</template>
+            </el-table-column>
+            <el-table-column label="租车费" width="90" align="right">
+              <template #default="{ row }">{{ row.rental_fee }}</template>
+            </el-table-column>
+            <el-table-column label="油费" width="80" align="right">
+              <template #default="{ row }">{{ row.fuel_fee }}</template>
+            </el-table-column>
+            <el-table-column label="桥路费" width="80" align="right">
+              <template #default="{ row }">{{ row.bridge_fee }}</template>
+            </el-table-column>
+            <el-table-column label="金额合计" width="95" align="right">
+              <template #default="{ row }"><strong>{{ ((row.rental_fee||0) + (row.fuel_fee||0) + (row.bridge_fee||0)).toFixed(2) }}</strong></template>
+            </el-table-column>
+          </el-table>
+
+          <div v-if="extReconTasks.length" style="display:flex;gap:24px;justify-content:flex-end;margin-top:12px;font-size:14px;color:#303133">
+            <span>租车费合计 <strong>¥{{ extReconTotals.rental.toFixed(2) }}</strong></span>
+            <span>油费合计 <strong>¥{{ extReconTotals.fuel.toFixed(2) }}</strong></span>
+            <span>桥路费合计 <strong>¥{{ extReconTotals.bridge.toFixed(2) }}</strong></span>
+            <span>金额合计 <strong style="color:#409eff">¥{{ extReconTotals.total.toFixed(2) }}</strong></span>
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
 
@@ -519,7 +586,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import api from '../utils/api'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 
 const router = useRouter()
 const activeTab = ref('client')
@@ -694,13 +761,17 @@ const queryReconciliation = async () => {
   } catch (e) {}
 }
 
-const exportReconciliation = () => {
-  const rows = reconTasks.value
+// ===== 对账单导出（样式复刻 dzdz.xlsx）=====
+const exportReconSheet = (rows, title, filename) => {
   if (!rows.length) return
 
+  const thinBorder = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }
+  const cellS = (align = 'center') => ({ border: thinBorder, alignment: { horizontal: align, vertical: 'center', wrapText: true } })
+
   const header = ['月份', '用车单位/个人', '出发地点', '目的地', '车牌号', '驾驶司机', '出车时间', '', '收车时间', '', '租用天数', '租车费', '油费', '桥路费', '金额合计']
+
   const dataRows = rows.map((t, i) => {
-    const r = i + 3 // 数据从第3行开始（行1标题、行2表头）
+    const r = i + 3
     const dep = (t.departure_time || '').split(' ')
     const ret = (t.return_time || '').split(' ')
     return [
@@ -708,8 +779,8 @@ const exportReconciliation = () => {
       t.client_type === 'company' ? (t.client_company || t.client_name) : t.client_name,
       t.departure || '',
       t.self_drive ? '自驾' : (t.destination || ''),
-      t.vehicle_plate || '',
-      t.self_drive ? '自驾' : (t.driver_name || ''),
+      (t.unit_plates && t.unit_plates.length ? t.unit_plates.join('、') : (t.vehicle_plate || '')),
+      (t.unit_drivers && t.unit_drivers.length ? t.unit_drivers.join('、') : (t.self_drive ? '自驾' : (t.driver_name || ''))),
       dep[0] || '',
       dep[1] || '',
       ret[0] || '',
@@ -733,37 +804,101 @@ const exportReconciliation = () => {
   const footerRow = ['复核：                                                       制表：']
 
   const ws = XLSX.utils.aoa_to_sheet([
-    ['开平市大众汽车出租有限公司对账表'],
+    [title],
     header,
     ...dataRows,
     totalRow,
     footerRow
   ])
 
-  // 合并单元格
   ws['!merges'] = [
-    XLSX.utils.decode_range(`A1:O1`),   // 标题
-    XLSX.utils.decode_range(`G2:H2`),   // 出车时间
-    XLSX.utils.decode_range(`I2:J2`),   // 收车时间
-    XLSX.utils.decode_range(`A${last + 1}:K${last + 1}`),  // 金额合计：
-    XLSX.utils.decode_range(`A${last + 2}:N${last + 2}`)   // 复核/制表
+    XLSX.utils.decode_range('A1:O1'),
+    XLSX.utils.decode_range('G2:H2'),
+    XLSX.utils.decode_range('I2:J2'),
+    XLSX.utils.decode_range(`A${last + 1}:K${last + 1}`),
+    XLSX.utils.decode_range(`A${last + 2}:N${last + 2}`)
   ]
 
-  // 列宽
   ws['!cols'] = [
     { wch: 6 }, { wch: 28 }, { wch: 10 }, { wch: 10 }, { wch: 11 },
     { wch: 9 }, { wch: 11 }, { wch: 9 }, { wch: 11 }, { wch: 9 },
     { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 9 }
   ]
 
-  // 标题样式（加粗）
-  if (ws['A1']) ws['A1'].s = { font: { bold: true, sz: 20 } }
+  // 样式：标题/表头/数据/合计/复核
+  ws['A1'].s = { font: { name: '宋体', bold: true, sz: 26 }, alignment: { horizontal: 'center', vertical: 'center' } }
+  for (let c = 0; c < 15; c++) {
+    const h = ws[XLSX.utils.encode_cell({ r: 1, c })]
+    if (h) h.s = { font: { name: '宋体', bold: true, sz: 11 }, border: thinBorder, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }
+  }
+  for (let r = 2; r <= last; r++) {
+    for (let c = 0; c < 15; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })]
+      if (cell) {
+        const align = (c >= 11) ? 'right' : 'center'
+        cell.s = cellS(align)
+        if (!cell.t) { cell.t = 's'; cell.v = cell.v || '' }
+      }
+    }
+  }
+  for (let c = 0; c < 15; c++) {
+    const cell = ws[XLSX.utils.encode_cell({ r: last + 1, c })]
+    if (cell) cell.s = { font: { name: '宋体', bold: true }, border: thinBorder, alignment: { horizontal: c === 0 ? 'left' : 'right', vertical: 'center' } }
+  }
+  const footerCell = ws[XLSX.utils.encode_cell({ r: last + 2, c: 0 })]
+  if (footerCell) footerCell.s = { font: { name: '宋体' }, alignment: { horizontal: 'left', vertical: 'center' } }
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '对账表')
-  const name = `对账单_${reconQuery.value.client || '全部'}_${reconQuery.value.month || '全部'}.xlsx`
-  XLSX.writeFile(wb, name)
+  XLSX.writeFile(wb, filename)
   ElMessage.success('导出成功')
+}
+
+const exportReconciliation = () => {
+  const name = `对账单_${reconQuery.value.client || '全部'}_${reconQuery.value.month || '全部'}.xlsx`
+  exportReconSheet(reconTasks.value, '开平市大众汽车出租有限公司对账表', name)
+}
+
+// ===== 外部用车对账 =====
+const INTERNAL_COMPANIES_RECON = ['大众司', '国开司', '国顺司']
+const extReconQuery = ref({ company: '', month: '', dateRange: null })
+const extReconTasks = ref([])
+const extCompanies = ref([])
+
+const extReconTotals = computed(() => {
+  let rental = 0, fuel = 0, bridge = 0
+  for (const t of extReconTasks.value) {
+    rental += t.rental_fee || 0
+    fuel += t.fuel_fee || 0
+    bridge += t.bridge_fee || 0
+  }
+  return { rental, fuel, bridge, total: rental + fuel + bridge }
+})
+
+const queryExternalRecon = async () => {
+  if (!extReconQuery.value.company) {
+    ElMessage.warning('请选择车属单位')
+    return
+  }
+  const params = { company: extReconQuery.value.company }
+  if (extReconQuery.value.month) params.month = extReconQuery.value.month
+  if (extReconQuery.value.dateRange) {
+    params.start_date = extReconQuery.value.dateRange[0]
+    params.end_date = extReconQuery.value.dateRange[1]
+  }
+  try {
+    const res = await api.get('/reports/by-external-company', { params })
+    extReconTasks.value = (res.data.tasks || []).map(t => ({
+      ...t,
+      month_label: t.departure_time ? Number(t.departure_time.slice(5, 7)) + '月' : ''
+    }))
+  } catch (e) {}
+}
+
+const exportExternalRecon = () => {
+  const company = extReconQuery.value.company || '全部'
+  const name = `外部用车对账单_${company}_${extReconQuery.value.month || '全部'}.xlsx`
+  exportReconSheet(extReconTasks.value, `外部用车对账表（${company}）`, name)
 }
 
 const exportToExcel = (rows, columns, filename) => {
@@ -843,6 +978,13 @@ onMounted(async () => {
       }
     } catch (e) {}
     reconClientOptions.value = [...names].sort()
+    // 外部车属单位选项（非三大公司）
+    try {
+      const compRes = await api.get('/vehicle-companies')
+      extCompanies.value = (compRes.data || [])
+        .map(c => c.name)
+        .filter(n => n && !INTERNAL_COMPANIES_RECON.includes(n))
+    } catch (e) {}
   } catch (e) {}
 })
 </script>
