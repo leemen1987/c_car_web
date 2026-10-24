@@ -379,6 +379,69 @@
             </el-table>
           </div>
         </el-tab-pane>
+
+        <!-- 客户对账 -->
+        <el-tab-pane label="客户对账" name="reconciliation">
+          <el-form v-show="showSearch" :inline="true" style="margin-bottom:15px">
+            <el-form-item label="用车单位">
+              <el-input v-model="reconQuery.client" placeholder="输入单位名称" clearable style="width:180px" />
+            </el-form-item>
+            <el-form-item label="月份">
+              <el-date-picker v-model="reconQuery.month" type="month" format="YYYY-MM" value-format="YYYY-MM" placeholder="选择月份" clearable />
+            </el-form-item>
+            <el-form-item label="日期区间">
+              <el-date-picker v-model="reconQuery.dateRange" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
+                start-placeholder="开始日期" end-placeholder="结束日期" clearable />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="queryReconciliation">查询</el-button>
+              <el-button type="success" :disabled="!reconTasks.length" @click="exportReconciliation">导出对账单</el-button>
+            </el-form-item>
+          </el-form>
+
+          <el-table :data="reconTasks" border stripe size="small" max-height="480">
+            <el-table-column prop="month_label" label="月份" width="70" align="center" />
+            <el-table-column label="用车单位/个人" min-width="140">
+              <template #default="{ row }">{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</template>
+            </el-table-column>
+            <el-table-column prop="departure" label="出发地点" min-width="90" />
+            <el-table-column label="目的地" min-width="90">
+              <template #default="{ row }">{{ row.self_drive ? '自驾' : (row.destination || '-') }}</template>
+            </el-table-column>
+            <el-table-column prop="vehicle_plate" label="车牌号" min-width="100" />
+            <el-table-column label="驾驶司机" min-width="80">
+              <template #default="{ row }">{{ row.self_drive ? '自驾' : (row.driver_name || '-') }}</template>
+            </el-table-column>
+            <el-table-column label="出车时间" width="140">
+              <template #default="{ row }">{{ row.departure_time }}</template>
+            </el-table-column>
+            <el-table-column label="收车时间" width="140">
+              <template #default="{ row }">{{ row.return_time || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="租用天数" width="80" align="center">
+              <template #default="{ row }">{{ row.rental_days }}天</template>
+            </el-table-column>
+            <el-table-column label="租车费" width="90" align="right">
+              <template #default="{ row }">{{ row.rental_fee }}</template>
+            </el-table-column>
+            <el-table-column label="油费" width="80" align="right">
+              <template #default="{ row }">{{ row.fuel_fee }}</template>
+            </el-table-column>
+            <el-table-column label="桥路费" width="80" align="right">
+              <template #default="{ row }">{{ row.bridge_fee }}</template>
+            </el-table-column>
+            <el-table-column label="金额合计" width="95" align="right">
+              <template #default="{ row }"><strong>{{ ((row.rental_fee||0) + (row.fuel_fee||0) + (row.bridge_fee||0)).toFixed(2) }}</strong></template>
+            </el-table-column>
+          </el-table>
+
+          <div v-if="reconTasks.length" style="display:flex;gap:24px;justify-content:flex-end;margin-top:12px;font-size:14px;color:#303133">
+            <span>租车费合计 <strong>¥{{ reconTotals.rental.toFixed(2) }}</strong></span>
+            <span>油费合计 <strong>¥{{ reconTotals.fuel.toFixed(2) }}</strong></span>
+            <span>桥路费合计 <strong>¥{{ reconTotals.bridge.toFixed(2) }}</strong></span>
+            <span>金额合计 <strong style="color:#409eff">¥{{ reconTotals.total.toFixed(2) }}</strong></span>
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
 
@@ -448,7 +511,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import api from '../utils/api'
@@ -588,6 +651,108 @@ const queryByVehicle = async () => {
 
 const statusMap = { completed: '已完成', scheduled: '已排班', pending: '待排班', cancelled: '已取消' }
 const confirmMap = { confirmed: '已确认', rejected: '已拒绝', pending: '待确认' }
+
+// ===== 客户对账 =====
+const reconQuery = ref({ client: '', month: '', dateRange: null })
+const reconTasks = ref([])
+
+const reconTotals = computed(() => {
+  let rental = 0, fuel = 0, bridge = 0
+  for (const t of reconTasks.value) {
+    rental += t.rental_fee || 0
+    fuel += t.fuel_fee || 0
+    bridge += t.bridge_fee || 0
+  }
+  return { rental, fuel, bridge, total: rental + fuel + bridge }
+})
+
+const queryReconciliation = async () => {
+  const params = { client: reconQuery.value.client }
+  if (reconQuery.value.month) params.month = reconQuery.value.month
+  if (reconQuery.value.dateRange) {
+    params.start_date = reconQuery.value.dateRange[0]
+    params.end_date = reconQuery.value.dateRange[1]
+  }
+  try {
+    const res = await api.get('/reports/by-client', { params })
+    reconTasks.value = (res.data.tasks || []).map(t => ({
+      ...t,
+      month_label: t.departure_time ? Number(t.departure_time.slice(5, 7)) + '月' : ''
+    }))
+  } catch (e) {}
+}
+
+const exportReconciliation = () => {
+  const rows = reconTasks.value
+  if (!rows.length) return
+
+  const header = ['月份', '用车单位/个人', '出发地点', '目的地', '车牌号', '驾驶司机', '出车时间', '', '收车时间', '', '租用天数', '租车费', '油费', '桥路费', '金额合计']
+  const dataRows = rows.map((t, i) => {
+    const r = i + 3 // 数据从第3行开始（行1标题、行2表头）
+    const dep = (t.departure_time || '').split(' ')
+    const ret = (t.return_time || '').split(' ')
+    return [
+      t.month_label,
+      t.client_type === 'company' ? (t.client_company || t.client_name) : t.client_name,
+      t.departure || '',
+      t.self_drive ? '自驾' : (t.destination || ''),
+      t.vehicle_plate || '',
+      t.self_drive ? '自驾' : (t.driver_name || ''),
+      dep[0] || '',
+      dep[1] || '',
+      ret[0] || '',
+      ret[1] || '',
+      (t.rental_days || 0) + '天',
+      t.rental_fee || 0,
+      t.fuel_fee || 0,
+      t.bridge_fee || 0,
+      { t: 'n', f: `SUM(L${r}:N${r})` }
+    ]
+  })
+
+  const last = rows.length + 2
+  const totalRow = [
+    '金额合计：', '', '', '', '', '', '', '', '', '', '',
+    { t: 'n', f: `SUM(L3:L${last})` },
+    { t: 'n', f: `SUM(M3:M${last})` },
+    { t: 'n', f: `SUM(N3:N${last})` },
+    { t: 'n', f: `SUM(O3:O${last})` }
+  ]
+  const footerRow = ['复核：                                                       制表：']
+
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['开平市大众汽车出租有限公司对账表'],
+    header,
+    ...dataRows,
+    totalRow,
+    footerRow
+  ])
+
+  // 合并单元格
+  ws['!merges'] = [
+    XLSX.utils.decode_range(`A1:O1`),   // 标题
+    XLSX.utils.decode_range(`G2:H2`),   // 出车时间
+    XLSX.utils.decode_range(`I2:J2`),   // 收车时间
+    XLSX.utils.decode_range(`A${last + 1}:K${last + 1}`),  // 金额合计：
+    XLSX.utils.decode_range(`A${last + 2}:N${last + 2}`)   // 复核/制表
+  ]
+
+  // 列宽
+  ws['!cols'] = [
+    { wch: 6 }, { wch: 28 }, { wch: 10 }, { wch: 10 }, { wch: 11 },
+    { wch: 9 }, { wch: 11 }, { wch: 9 }, { wch: 11 }, { wch: 9 },
+    { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 9 }
+  ]
+
+  // 标题样式（加粗）
+  if (ws['A1']) ws['A1'].s = { font: { bold: true, sz: 20 } }
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '对账表')
+  const name = `对账单_${reconQuery.value.client || '全部'}_${reconQuery.value.month || '全部'}.xlsx`
+  XLSX.writeFile(wb, name)
+  ElMessage.success('导出成功')
+}
 
 const exportToExcel = (rows, columns, filename) => {
   const data = rows.map(r => columns.map(c => c.formatter ? c.formatter(r) : r[c.prop] ?? ''))
