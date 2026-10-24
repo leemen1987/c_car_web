@@ -384,7 +384,9 @@
         <el-tab-pane label="客户对账" name="reconciliation">
           <el-form v-show="showSearch" :inline="true" style="margin-bottom:15px">
             <el-form-item label="用车单位">
-              <el-input v-model="reconQuery.client" placeholder="输入单位名称" clearable style="width:180px" />
+              <el-select v-model="reconQuery.client" placeholder="选择或输入" clearable filterable allow-create default-first-option style="width:200px">
+                <el-option v-for="n in reconClientOptions" :key="n" :label="n" :value="n" />
+              </el-select>
             </el-form-item>
             <el-form-item label="月份">
               <el-date-picker v-model="reconQuery.month" type="month" format="YYYY-MM" value-format="YYYY-MM" placeholder="选择月份" clearable />
@@ -655,6 +657,7 @@ const confirmMap = { confirmed: '已确认', rejected: '已拒绝', pending: '�
 // ===== 客户对账 =====
 const reconQuery = ref({ client: '', month: '', dateRange: null })
 const reconTasks = ref([])
+const reconClientOptions = ref([])
 
 const reconTotals = computed(() => {
   let rental = 0, fuel = 0, bridge = 0
@@ -679,6 +682,13 @@ const queryReconciliation = async () => {
       ...t,
       month_label: t.departure_time ? Number(t.departure_time.slice(5, 7)) + '月' : ''
     }))
+    // 收集本次出现过的用车单位/个人名，补全下拉选项
+    const names = new Set(reconClientOptions.value)
+    for (const t of reconTasks.value) {
+      const n = t.client_type === 'company' ? (t.client_company || t.client_name) : t.client_name
+      if (n) names.add(n)
+    }
+    reconClientOptions.value = [...names].sort()
   } catch (e) {}
 }
 
@@ -818,9 +828,11 @@ const exportVehicle = () => {
 
 onMounted(async () => {
   try {
-    const [drvRes, vehRes] = await Promise.all([api.get('/drivers'), api.get('/vehicles')])
+    const [drvRes, vehRes, cliRes] = await Promise.all([api.get('/drivers'), api.get('/vehicles'), api.get('/clients')])
     allDrivers.value = drvRes.data
     allVehicles.value = vehRes.data
+    // 客户对账下拉选项：单位列表
+    reconClientOptions.value = (cliRes.data || []).map(c => c.name).filter(Boolean)
   } catch (e) {}
 })
 </script>
