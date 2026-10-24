@@ -77,7 +77,7 @@
             </el-descriptions-item>
           </el-descriptions>
 
-          <el-table :data="clientTasks" border stripe :max-height="tableHeight">
+          <el-table :data="clientTasks" border stripe :max-height="tableHeight" data-table-wrap>
             <el-table-column type="index" label="序号" width="60" align="center" />
             <el-table-column label="包车类型" width="90" align="center">
               <template #default="{ row }">
@@ -403,7 +403,7 @@
             </el-form-item>
           </el-form>
 
-          <el-table :data="reconTasks" border stripe size="small" :max-height="tableHeight">
+          <el-table :data="reconTasks" border stripe size="small" :max-height="tableHeight" data-table-wrap>
             <el-table-column prop="month_label" label="月份" width="70" align="center" />
             <el-table-column label="用车单位/个人" min-width="140">
               <template #default="{ row }">{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</template>
@@ -468,7 +468,7 @@
             </el-form-item>
           </el-form>
 
-          <el-table :data="extReconTasks" border stripe size="small" :max-height="tableHeight">
+          <el-table :data="extReconTasks" border stripe size="small" :max-height="tableHeight" data-table-wrap>
             <el-table-column prop="month_label" label="月份" width="70" align="center" />
             <el-table-column label="用车单位/个人" min-width="140">
               <template #default="{ row }">{{ row.client_type === 'company' ? (row.client_company || row.client_name) : row.client_name }}</template>
@@ -593,7 +593,17 @@ const activeTab = ref('client')
 const showSearch = ref(true)
 const tableHeight = ref(400)
 const updateTableHeight = () => {
-  tableHeight.value = Math.max(300, window.innerHeight - (showSearch.value ? 275 : 205))
+  // 测量当前可见表格的顶部位置，精确贴合视口（避免外层出现第二个滚动条）
+  const wraps = document.querySelectorAll('[data-table-wrap]')
+  for (const w of wraps) {
+    if (w.offsetParent !== null) {
+      const top = w.getBoundingClientRect().top
+      if (top > 0) {
+        tableHeight.value = Math.max(200, window.innerHeight - top - 60)
+        return
+      }
+    }
+  }
 }
 const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
 const canEdit = () => user.value.role === 'admin' || (user.value.permissions || []).includes('report_edit')
@@ -968,6 +978,7 @@ const exportVehicle = () => {
 }
 
 watch(showSearch, () => nextTick(updateTableHeight))
+watch(activeTab, () => nextTick(updateTableHeight))
 
 onMounted(async () => {
   updateTableHeight()
