@@ -523,7 +523,7 @@
         </template>
         <template v-if="!currentScheduleTask?.self_drive && !currentScheduleTask?.external_vehicle">
         <el-form-item label="司机人工费">
-          <el-tag>{{ scheduleInfo.labor_fee }} 元</el-tag>
+          <el-tag :type="scheduleLaborFee !== (scheduleInfo.labor_fee || 0) ? 'warning' : ''">{{ scheduleLaborFee }} 元<template v-if="scheduleLaborFee !== (scheduleInfo.labor_fee || 0)">（已调整）</template></el-tag>
         </el-form-item>
         <el-form-item v-if="scheduleInfo.settlement_start" label="结算周期">
           <span style="color:#909399;font-size:13px">{{ scheduleInfo.settlement_start }}-{{ scheduleInfo.settlement_end }}</span>
@@ -565,17 +565,12 @@
               <el-tag v-if="v.is_busy" type="warning" size="small" style="margin-left:6px">出车中</el-tag>
             </el-option>
           </el-select>
-          <template v-if="!a.external">
-            <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
-              <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id">
-                <span>{{ d.name }} ({{ d.phone }}) ¥{{ d.total_labor_fee }}</span>
-                <el-tag v-if="d.is_busy" type="warning" size="small" style="margin-left:6px">出车中</el-tag>
-              </el-option>
-            </el-select>
-          </template>
-          <template v-else>
-            <span style="flex:1;color:#e6a23c;font-size:12px">自带司机 · 租车费10%提成</span>
-          </template>
+          <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
+            <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id">
+              <span>{{ d.name }} ({{ d.phone }}) ¥{{ d.total_labor_fee }}</span>
+              <el-tag v-if="d.is_busy" type="warning" size="small" style="margin-left:6px">出车中</el-tag>
+            </el-option>
+          </el-select>
         </div>
         <el-form-item label="备注" style="margin-top:12px">
           <el-input v-model="scheduleRemark" type="textarea" :rows="2" placeholder="选填" />
@@ -1270,6 +1265,14 @@ const computedRentalDays = computed(() => {
 })
 
 const scheduleInfo = ref({ vehicles: [], drivers: [], labor_rate: 0, task_start: '', task_end: '' })
+const scheduleLaborFee = computed(() => {
+  const task = currentScheduleTask.value
+  if (!task || task.external_vehicle || task.self_drive) return scheduleInfo.value.labor_fee || 0
+  const origInt = (task.capacity_plan || []).reduce((s, p) => s + (p.external ? 0 : (p.count || 1)), 0) || task.vehicle_count || 1
+  const curInt = scheduleAssignments.value.filter(a => !a.external).length
+  if (origInt <= 0 || curInt === origInt) return scheduleInfo.value.labor_fee || task.labor_fee || 0
+  return Math.round(((task.labor_fee || 0) / origInt) * curInt * 100) / 100
+})
 const scheduleForm = ref({ vehicle_id: null, driver_id: null })
 const scheduleTaskId = ref(null)
 const scheduleAssignments = ref([])
@@ -1552,7 +1555,7 @@ const submitSchedule = async () => {
       ElMessage.warning(`请为第${i + 1}台车选择车辆`)
       return
     }
-    if (!isSelfDrive && !a.external && !a.driver_id) {
+    if (!isSelfDrive && !a.driver_id) {
       ElMessage.warning(`请为第${i + 1}台车选择司机`)
       return
     }
@@ -1567,12 +1570,8 @@ const submitSchedule = async () => {
     const externalRental = extSlots.reduce((s, a) => s + (a.rental_fee || 0), 0)
     const totalRental = task.rental_fee || 0
 
-    // 重算司机人工费 = 差费标准 × 天数 × 实际内部车辆数
-    let laborFee = task.labor_fee || 0
-    const origIntCount = (task.capacity_plan || []).reduce((s, p) => s + (p.external ? 0 : (p.count || 1)), 0) || task.vehicle_count || 1
-    if (origIntCount > 0 && intSlots.length !== origIntCount) {
-      laborFee = Math.round((laborFee / origIntCount) * intSlots.length * 100) / 100
-    }
+    // 司机人工费按实际内部车辆数等比缩放
+    const laborFee = scheduleLaborFee.value
     const estimatedCost = Math.round(((task.fuel_fee || 0) + (task.bridge_fee || 0) + laborFee) * 100) / 100
     const internalRental = totalRental - externalRental
     const estimatedProfit = Math.round((internalRental + externalRental * 0.1 - estimatedCost) * 100) / 100

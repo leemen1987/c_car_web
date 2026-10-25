@@ -1433,13 +1433,13 @@ def schedule_task(task_id):
     task_end = task.return_time if task.return_time else task_start + timedelta(days=task.rental_days or 1)
     is_self_drive = task.self_drive or False
 
-    # 外部车辆只选车辆不选司机，内部车辆需选司机（允许重叠排班）
+    # 所有车辆都需选择司机（允许重叠排班）
     for a in assignments:
         vid = a.get('vehicle_id')
         did = a.get('driver_id')
         if not vid:
             return jsonify({'code': 400, 'msg': '请选择车辆'})
-        if not is_self_drive and not a.get('external') and not did:
+        if not is_self_drive and not did:
             return jsonify({'code': 400, 'msg': '请选择司机'})
 
     # 清除旧的车辆分配
