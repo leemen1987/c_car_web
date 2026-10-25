@@ -1433,13 +1433,13 @@ def schedule_task(task_id):
     task_end = task.return_time if task.return_time else task_start + timedelta(days=task.rental_days or 1)
     is_self_drive = task.self_drive or False
 
-    # 外部车辆同样选择车辆和司机，走统一逻辑（允许重叠排班）
+    # 外部车辆只选车辆不选司机，内部车辆需选司机（允许重叠排班）
     for a in assignments:
         vid = a.get('vehicle_id')
         did = a.get('driver_id')
         if not vid:
             return jsonify({'code': 400, 'msg': '请选择车辆'})
-        if not is_self_drive and not did:
+        if not is_self_drive and not a.get('external') and not did:
             return jsonify({'code': 400, 'msg': '请选择司机'})
 
     # 清除旧的车辆分配
@@ -1459,6 +1459,11 @@ def schedule_task(task_id):
     remark = data.get('remark')
     if remark is not None:
         task.remark = remark
+
+    # 排班时临时调整内外部车辆后重算的费用
+    for field in ('external_rental', 'labor_fee', 'estimated_cost', 'estimated_profit'):
+        if field in data and data[field] is not None:
+            setattr(task, field, data[field])
 
     # 设置主车辆/司机为第一个分配
     task.vehicle_id = assignments[0].get('vehicle_id')

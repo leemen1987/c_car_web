@@ -557,19 +557,25 @@
         <div v-for="(a, idx) in scheduleAssignments" :key="idx" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
           <span style="width:30px;color:#909399;font-size:13px">{{ idx + 1 }}.</span>
           <el-tag v-if="a.capacity" size="small" type="warning" style="flex-shrink:0">{{ a.capacity }}</el-tag>
-          <el-tag v-if="a.external" size="small" type="danger" style="flex-shrink:0">外部</el-tag>
+          <el-checkbox v-model="a.external" size="small" style="flex-shrink:0" @change="onScheduleExternalChange(idx)">外部</el-checkbox>
           <el-select v-model="a.vehicle_id" :placeholder="a.capacity ? '选择' + a.capacity + '车辆' : '选择车辆'" style="flex:1" filterable>
-            <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '')" :value="v.id">
+            <el-option v-for="v in getAvailableVehicles(idx)" :key="v.id" :label="v.plate_number + (v.capacity ? ' (' + v.capacity + ')' : '') + (v.company ? ' [' + v.company + ']' : '')" :value="v.id">
               <span>{{ v.plate_number }}{{ v.capacity ? ' (' + v.capacity + ')' : '' }}</span>
+              <span v-if="v.company" style="color:#909399;font-size:12px;margin-left:4px">{{ v.company }}</span>
               <el-tag v-if="v.is_busy" type="warning" size="small" style="margin-left:6px">出车中</el-tag>
             </el-option>
           </el-select>
-          <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
-            <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id">
-              <span>{{ d.name }} ({{ d.phone }}) ¥{{ d.total_labor_fee }}</span>
-              <el-tag v-if="d.is_busy" type="warning" size="small" style="margin-left:6px">出车中</el-tag>
-            </el-option>
-          </el-select>
+          <template v-if="!a.external">
+            <el-select v-model="a.driver_id" placeholder="选择司机" style="flex:1" filterable>
+              <el-option v-for="d in getAvailableDrivers(idx)" :key="d.id" :label="d.name + ' (' + d.phone + ') ¥' + d.total_labor_fee" :value="d.id">
+                <span>{{ d.name }} ({{ d.phone }}) ¥{{ d.total_labor_fee }}</span>
+                <el-tag v-if="d.is_busy" type="warning" size="small" style="margin-left:6px">出车中</el-tag>
+              </el-option>
+            </el-select>
+          </template>
+          <template v-else>
+            <span style="flex:1;color:#e6a23c;font-size:12px">自带司机 · 租车费10%提成</span>
+          </template>
         </div>
         <el-form-item label="备注" style="margin-top:12px">
           <el-input v-model="scheduleRemark" type="textarea" :rows="2" placeholder="选填" />
@@ -1477,7 +1483,7 @@ const showScheduleDialog = async (row) => {
   for (const p of plan) {
     const c = p.count || 1
     for (let i = 0; i < c; i++) {
-      slots.push({ vehicle_id: null, driver_id: null, capacity: p.vehicle_type || '', external: p.external || false })
+      slots.push({ vehicle_id: null, driver_id: null, capacity: p.vehicle_type || '', external: p.external || false, rental_fee: p.rental_fee || 0 })
     }
   }
   scheduleAssignments.value = slots
@@ -1527,24 +1533,63 @@ const getAvailableDrivers = (currentIdx) => {
   return scheduleInfo.value.drivers.filter(d => !selectedIds.includes(d.id))
 }
 
+const onScheduleExternalChange = (idx) => {
+  const a = scheduleAssignments.value[idx]
+  if (a.external) {
+    a.driver_id = null
+    a.vehicle_id = null
+  } else {
+    a.vehicle_id = null
+  }
+}
+
 const submitSchedule = async () => {
   const isSelfDrive = currentScheduleTask.value?.self_drive
-  // 验证所有分配都已填写（外部车辆同样需要选择车辆和司机）
+  // 验证所有分配都已填写（外部车辆只选车辆不选司机）
   for (let i = 0; i < scheduleAssignments.value.length; i++) {
     const a = scheduleAssignments.value[i]
     if (!a.vehicle_id) {
       ElMessage.warning(`请为第${i + 1}台车选择车辆`)
       return
     }
-    if (!isSelfDrive && !a.driver_id) {
+    if (!isSelfDrive && !a.external && !a.driver_id) {
       ElMessage.warning(`请为第${i + 1}台车选择司机`)
       return
     }
   }
+
+  // 按实际内外部槽位重算费用
+  const task = currentScheduleTask.value
+  let feeUpdate = {}
+  if (!isSelfDrive && task && !task.external_vehicle) {
+    const extSlots = scheduleAssignments.value.filter(a => a.external)
+    const intSlots = scheduleAssignments.value.filter(a => !a.external)
+    const externalRental = extSlots.reduce((s, a) => s + (a.rental_fee || 0), 0)
+    const totalRental = task.rental_fee || 0
+
+    // 重算司机人工费 = 差费标准 × 天数 × 实际内部车辆数
+    let laborFee = task.labor_fee || 0
+    const origIntCount = (task.capacity_plan || []).reduce((s, p) => s + (p.external ? 0 : (p.count || 1)), 0) || task.vehicle_count || 1
+    if (origIntCount > 0 && intSlots.length !== origIntCount) {
+      laborFee = Math.round((laborFee / origIntCount) * intSlots.length * 100) / 100
+    }
+    const estimatedCost = Math.round(((task.fuel_fee || 0) + (task.bridge_fee || 0) + laborFee) * 100) / 100
+    const internalRental = totalRental - externalRental
+    const estimatedProfit = Math.round((internalRental + externalRental * 0.1 - estimatedCost) * 100) / 100
+
+    feeUpdate = {
+      external_rental: Math.round(externalRental * 100) / 100,
+      labor_fee: laborFee,
+      estimated_cost: estimatedCost,
+      estimated_profit: estimatedProfit
+    }
+  }
+
   try {
     await api.post(`/tasks/${scheduleTaskId.value}/schedule`, { 
       assignments: scheduleAssignments.value,
-      remark: scheduleRemark.value
+      remark: scheduleRemark.value,
+      ...feeUpdate
     })
     ElMessage.success('排班成功')
     scheduleDialogVisible.value = false
