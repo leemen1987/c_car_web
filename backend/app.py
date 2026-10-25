@@ -1038,16 +1038,16 @@ def get_task_change_log(task_id):
 
 
 def calc_rental_days(departure_time, return_time):
-    """根据出车时间和回程时间自动计算租用天数，最少半天"""
+    """根据出车时间和回程时间自动计算租用天数：≤5小时=半天，>5小时按整数天"""
     if not return_time or not departure_time:
         return 1
     if return_time <= departure_time:
         return 0.5
     diff_hours = (return_time - departure_time).total_seconds() / 3600
-    if diff_hours <= 12:
+    if diff_hours <= 5:
         return 0.5
     import math
-    return math.ceil(diff_hours / 12) * 0.5
+    return math.ceil(diff_hours / 24)
 
 
 @app.route('/api/tasks', methods=['POST'])

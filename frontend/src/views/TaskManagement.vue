@@ -1761,8 +1761,8 @@ const getRentalDays = () => {
   const d = new Date(dt), r = new Date(rt)
   if (r <= d) return 0.5
   const hours = (r - d) / 3600000
-  if (hours <= 12) return 0.5
-  return Math.ceil(hours / 12) * 0.5
+  if (hours <= 5) return 0.5
+  return Math.ceil(hours / 24)
 }
 
 const internalVehicleCount = computed(() => {
