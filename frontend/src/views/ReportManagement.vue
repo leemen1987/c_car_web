@@ -679,6 +679,20 @@ const driverResults = ref([])
 const allDrivers = ref([])
 
 const vehicleQuery = ref({ vehicle_id: null, client_type: '', company: '', paid_method: '', is_paid: '', is_invoiced: '', month: '', year: '', dateRange: null })
+const vehicleCompanyOptions = computed(() => {
+  const names = new Set()
+  for (const v of allVehicles.value) {
+    if (v.company) names.add(v.company)
+  }
+  return [...names].sort()
+})
+const filteredVehiclesForQuery = computed(() => {
+  if (!vehicleQuery.value.company) return allVehicles.value
+  return allVehicles.value.filter(v => v.company === vehicleQuery.value.company)
+})
+const onVehicleCompanyChange = () => {
+  vehicleQuery.value.vehicle_id = null
+}
 const vehicleResults = ref([])
 const allVehicles = ref([])
 
