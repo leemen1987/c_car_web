@@ -288,9 +288,14 @@
                 <el-option label="未开票" value="0" />
               </el-select>
             </el-form-item>
+            <el-form-item label="车属单位">
+              <el-select v-model="vehicleQuery.company" placeholder="全部" clearable filterable style="width:160px" @change="onVehicleCompanyChange">
+                <el-option v-for="c in vehicleCompanyOptions" :key="c" :label="c" :value="c" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="车辆">
               <el-select v-model="vehicleQuery.vehicle_id" placeholder="选择车辆" clearable style="width:200px">
-                <el-option v-for="v in allVehicles" :key="v.id" :label="v.plate_number + ' (' + v.vehicle_type + ')'" :value="v.id" />
+                <el-option v-for="v in filteredVehiclesForQuery" :key="v.id" :label="v.plate_number + ' (' + v.vehicle_type + ')'" :value="v.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="月份">
@@ -673,7 +678,7 @@ const driverQuery = ref({ driver_id: null, client_type: '', paid_method: '', is_
 const driverResults = ref([])
 const allDrivers = ref([])
 
-const vehicleQuery = ref({ vehicle_id: null, client_type: '', paid_method: '', is_paid: '', is_invoiced: '', month: '', year: '', dateRange: null })
+const vehicleQuery = ref({ vehicle_id: null, client_type: '', company: '', paid_method: '', is_paid: '', is_invoiced: '', month: '', year: '', dateRange: null })
 const vehicleResults = ref([])
 const allVehicles = ref([])
 
@@ -718,6 +723,7 @@ const queryByDriver = async () => {
 const queryByVehicle = async () => {
   const params = {}
   if (vehicleQuery.value.vehicle_id) params.vehicle_id = vehicleQuery.value.vehicle_id
+  if (vehicleQuery.value.company) params.company = vehicleQuery.value.company
   if (vehicleQuery.value.client_type) params.client_type = vehicleQuery.value.client_type
   if (vehicleQuery.value.paid_method) params.paid_method = vehicleQuery.value.paid_method
   if (vehicleQuery.value.is_paid) params.is_paid = vehicleQuery.value.is_paid

@@ -2126,6 +2126,7 @@ def report_by_driver():
 def report_by_vehicle():
     vehicle_id = request.args.get('vehicle_id', type=int)
     client_type = request.args.get('client_type', '')
+    company = request.args.get('company', '')
     paid_method = request.args.get('paid_method', '')
     is_paid = request.args.get('is_paid', '')
     is_invoiced = request.args.get('is_invoiced', '')
@@ -2139,6 +2140,8 @@ def report_by_vehicle():
         query = query.filter(Task.self_drive == True)
     elif client_type:
         query = query.filter(Task.client_type == client_type)
+    if company:
+        query = query.join(Vehicle, Task.vehicle_id == Vehicle.id).filter(Vehicle.company == company)
     if vehicle_id:
         query = query.filter(Task.vehicle_id == vehicle_id)
     if paid_method:
