@@ -1242,8 +1242,13 @@ def update_task(task_id):
     # 重算预计成本和预估利润（费用字段可能被修改）
     if any(f in data for f in ('rental_fee', 'fuel_fee', 'bridge_fee', 'labor_fee', 'external_vehicle', 'capacity_plan')):
         if task.external_vehicle:
-            task.estimated_cost = round((task.rental_fee or 0) * 0.9, 2)
-            task.estimated_profit = round((task.rental_fee or 0) * 0.1, 2)
+            if task.self_drive:
+                _commission = 50 * (task.rental_days or 1)
+                task.estimated_profit = round(_commission, 2)
+                task.estimated_cost = round((task.rental_fee or 0) - _commission, 2)
+            else:
+                task.estimated_cost = round((task.rental_fee or 0) * 0.9, 2)
+                task.estimated_profit = round((task.rental_fee or 0) * 0.1, 2)
         else:
             task.estimated_cost = (task.fuel_fee or 0) + (task.bridge_fee or 0) + (task.labor_fee or 0)
             internal_rental = (task.rental_fee or 0) - (task.external_rental or 0)
@@ -1523,11 +1528,15 @@ def complete_task(task_id):
 
     # 计算成本和利润
     if task.external_vehicle:
-        # 全部外部车辆：利润 = 租车费 × 10% − 其他费用
+        # 全部外部车辆：自驾车按¥50/天提成，其余按10%提成
         task.actual_fuel_fee = 0
         task.actual_bridge_fee = 0
         task.actual_labor_fee = 0
-        task.final_profit = round((task.rental_fee or 0) * 0.1 - (task.other_fee or 0), 2)
+        if task.self_drive:
+            _commission = 50 * (task.rental_days or 1)
+            task.final_profit = round(_commission - (task.other_fee or 0), 2)
+        else:
+            task.final_profit = round((task.rental_fee or 0) * 0.1 - (task.other_fee or 0), 2)
         task.actual_cost = round((task.rental_fee or 0) - task.final_profit, 2)
     else:
         # 内部/混合：内部车费 − 实际成本 + 外部车费×10%

@@ -492,7 +492,7 @@
           <el-col :span="24">
             <el-form-item label="预估利润">
               <span style="color:#409eff;font-weight:600">¥{{ externalProfit.toFixed(2) }}</span>
-              <span style="color:#909399;font-size:12px;margin-left:8px">（租车费10%提成）</span>
+              <span style="color:#909399;font-size:12px;margin-left:8px">{{ taskForm.self_drive ? '（¥50/天提成）' : '（租车费10%提成）' }}</span>
             </el-form-item>
           </el-col>
         </el-row>
@@ -604,8 +604,8 @@
         <el-form-item label="租车费(元)">
           <el-input :model-value="completeForm.rental_fee" disabled />
         </el-form-item>
-        <el-form-item label="提成利润(10%)">
-          <span style="color:#409eff;font-weight:600">¥{{ ((completeForm.rental_fee || 0) * 0.1).toFixed(2) }}</span>
+        <el-form-item :label="currentCompleteTask?.self_drive ? '提成利润(¥50/天)' : '提成利润(10%)'">
+          <span style="color:#409eff;font-weight:600">¥{{ currentCompleteTask?.self_drive ? (50 * (currentCompleteTask?.rental_days || 1)).toFixed(2) : ((completeForm.rental_fee || 0) * 0.1).toFixed(2) }}</span>
         </el-form-item>
         </template>
         <template v-if="!isSelfDriveComplete && !isExternalComplete">
@@ -1329,7 +1329,10 @@ const onEndMileageChange = () => {
 }
 
 const estimatedCost = computed(() => (taskForm.value.fuel_fee + taskForm.value.bridge_fee + taskForm.value.labor_fee).toFixed(2))
-const externalProfit = computed(() => (taskForm.value.rental_fee || 0) * 0.1)
+const externalProfit = computed(() => {
+  if (taskForm.value.self_drive) return 50 * (getRentalDays() || 1)
+  return (taskForm.value.rental_fee || 0) * 0.1
+})
 
 const dailyRentalTotal = computed(() => {
   const days = taskForm.value.rental_days ?? null
