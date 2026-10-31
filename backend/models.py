@@ -628,3 +628,27 @@ class ApprovalStep(db.Model):
             'acted_at': self.acted_at.strftime('%Y-%m-%d %H:%M') if self.acted_at else None,
             'push_status': self.push_status
         }
+
+
+class LoginLog(db.Model):
+    """登录操作日志"""
+    __tablename__ = 'login_logs'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, nullable=True)
+    username = db.Column(db.String(50), default='')
+    action = db.Column(db.String(20), default='login')  # login/logout
+    ip = db.Column(db.String(50), default='')
+    user_agent = db.Column(db.String(255), default='')
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'username': self.username,
+            'action': self.action,
+            'ip': self.ip,
+            'user_agent': self.user_agent,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
+        }

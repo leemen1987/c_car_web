@@ -36,6 +36,10 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>报表管理</span>
         </el-menu-item>
+        <el-menu-item index="/login-history" v-if="user?.role === 'admin'">
+          <el-icon><Notebook /></el-icon>
+          <span>历史操作</span>
+        </el-menu-item>
         <el-menu-item index="/permissions" v-if="user?.role === 'admin'">
           <el-icon><Setting /></el-icon>
           <span>权限控制</span>
@@ -78,6 +82,10 @@
         <el-menu-item index="/reports" v-if="hasPermission('report')">
           <el-icon><DataAnalysis /></el-icon>
           <span>报表管理</span>
+        </el-menu-item>
+        <el-menu-item index="/login-history" v-if="user?.role === 'admin'">
+          <el-icon><Notebook /></el-icon>
+          <span>历史操作</span>
         </el-menu-item>
         <el-menu-item index="/permissions" v-if="user?.role === 'admin'">
           <el-icon><Setting /></el-icon>

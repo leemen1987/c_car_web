@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, session, redirect
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
-from models import db, User, Driver, Vehicle, VehicleCompany, Task, TaskVehicle, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot, LongRentalContract, LongRentalBill, SystemConfig, ApprovalFlow, ApprovalStep
+from models import db, User, Driver, Vehicle, VehicleCompany, Task, TaskVehicle, LocationLaborRate, Client, ClientContact, ScheduleConfirmation, ConfirmationSnapshot, LongRentalContract, LongRentalBill, SystemConfig, ApprovalFlow, ApprovalStep, LoginLog
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, date
 from functools import wraps
@@ -114,13 +114,60 @@ def login():
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({'code': 401, 'msg': '用户名或密码错误'})
     session['user_id'] = user.id
+    try:
+        log = LoginLog(user_id=user.id, username=user.username, action='login',
+                       ip=request.remote_addr or '', user_agent=request.headers.get('User-Agent', '')[:255])
+        db.session.add(log)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
     return jsonify({'code': 200, 'msg': '登录成功', 'data': user.to_dict()})
 
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
+    uid = session.get('user_id')
+    if uid:
+        try:
+            u = User.query.get(uid)
+            log = LoginLog(user_id=uid, username=u.username if u else '', action='logout',
+                           ip=request.remote_addr or '', user_agent=request.headers.get('User-Agent', '')[:255])
+            db.session.add(log)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
     session.pop('user_id', None)
     return jsonify({'code': 200, 'msg': '已退出登录'})
+
+
+@app.route('/api/login-logs', methods=['GET'])
+@admin_required
+def list_login_logs():
+    username = request.args.get('username', '')
+    action = request.args.get('action', '')
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 50, type=int)
+
+    query = LoginLog.query
+    if username:
+        query = query.filter(LoginLog.username.like(f'%{username}%'))
+    if action:
+        query = query.filter(LoginLog.action == action)
+    if start_date:
+        query = query.filter(LoginLog.created_at >= start_date)
+    if end_date:
+        query = query.filter(LoginLog.created_at <= end_date + ' 23:59:59')
+
+    total = query.count()
+    logs = query.order_by(LoginLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return jsonify({'code': 200, 'data': {
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'list': [l.to_dict() for l in logs]
+    }})
 
 
 @app.route('/api/user/info', methods=['GET'])
