@@ -278,8 +278,8 @@
         <el-form label-width="100px">
           <el-form-item label="日期筛选">
             <el-date-picker v-model="importDateRange" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
-              start-placeholder="开始日期" end-placeholder="结束日期" clearable style="width:280px" />
-            <span style="color:#909399;font-size:12px;margin-left:10px">按出车时间筛选，不选则导入全部</span>
+              start-placeholder="开始日期" end-placeholder="结束日期" clearable style="width:220px" />
+            <span style="color:#909399;font-size:12px;margin-left:8px">按出车时间筛选，不选则导入全部</span>
           </el-form-item>
           <el-form-item label="Excel文件">
             <input type="file" accept=".xlsx,.xls" @change="onImportFileChange" style="font-size:13px" />
@@ -303,21 +303,21 @@
               <el-tag v-else type="warning" size="small">待排班</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="用车方" width="130">
+          <el-table-column label="用车方" width="110">
             <template #default="{ row }"><el-input v-model="row.client_name" size="small" /></template>
           </el-table-column>
-          <el-table-column label="出发→目的" width="150">
+          <el-table-column label="出发→目的" width="135">
             <template #default="{ row }">
               <el-input v-model="row.departure" size="small" placeholder="出发" style="width:65px" />
               <span style="color:#909399">→</span>
               <el-input v-model="row.destination" size="small" placeholder="目的" style="width:65px" :disabled="row.self_drive" />
             </template>
           </el-table-column>
-          <el-table-column label="出车时间" width="155">
-            <template #default="{ row }"><el-date-picker v-model="row.departure_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" size="small" style="width:145px" /></template>
+          <el-table-column label="出车时间" width="125">
+            <template #default="{ row }"><el-date-picker v-model="row.departure_time" type="datetime" format="MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" size="small" style="width:115px" /></template>
           </el-table-column>
-          <el-table-column label="回程时间" width="155">
-            <template #default="{ row }"><el-date-picker v-model="row.return_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" size="small" style="width:145px" /></template>
+          <el-table-column label="回程时间" width="125">
+            <template #default="{ row }"><el-date-picker v-model="row.return_time" type="datetime" format="MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" size="small" style="width:115px" /></template>
           </el-table-column>
           <el-table-column label="天数" width="80">
             <template #default="{ row }"><el-input-number v-model="row.rental_days" :min="0" :step="0.5" size="small" controls-position="right" style="width:65px" /></template>
