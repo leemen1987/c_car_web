@@ -2434,11 +2434,17 @@ onMounted(async () => {
   white-space: nowrap !important;
   overflow: visible !important;
 }
-.import-date-range.el-range-editor {
+:deep(.import-date-range) {
   width: 220px !important;
+  max-width: 220px !important;
 }
-.import-date-range .el-range-input {
+:deep(.import-date-range .el-range-input) {
   font-size: 12px;
-  width: 70px;
+  width: 72px !important;
+  min-width: 60px !important;
+}
+:deep(.import-date-range .el-range-separator) {
+  width: 20px !important;
+  padding: 0 !important;
 }
 </style>
