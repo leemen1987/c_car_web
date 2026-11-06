@@ -277,8 +277,8 @@
       <template v-if="!importPreviewRows.length">
         <el-form label-width="100px">
           <el-form-item label="日期筛选">
-            <el-date-picker v-model="importDateRange" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
-              start-placeholder="开始日期" end-placeholder="结束日期" clearable style="width:110px" />
+            <el-date-picker v-model="importDateRange" class="import-date-range" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
+              start-placeholder="开始日期" end-placeholder="结束日期" clearable />
             <span style="color:#909399;font-size:12px;margin-left:8px">按出车时间筛选，不选则导入全部</span>
           </el-form-item>
           <el-form-item label="Excel文件">
@@ -2433,5 +2433,12 @@ onMounted(async () => {
 :deep(.el-table .el-table__header-wrapper th) {
   white-space: nowrap !important;
   overflow: visible !important;
+}
+.import-date-range.el-range-editor {
+  width: 220px !important;
+}
+.import-date-range .el-range-input {
+  font-size: 12px;
+  width: 70px;
 }
 </style>
