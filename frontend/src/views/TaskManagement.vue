@@ -275,16 +275,18 @@
     <!-- Add/Edit Task Dialog -->
     <el-dialog v-model="importDialogVisible" title="导入任务" :width="isMobile ? '100%' : '1100px'" :fullscreen="isMobile">
       <template v-if="!importPreviewRows.length">
-        <el-form label-width="100px">
-          <el-form-item label="日期筛选" class="import-date-item">
+        <div style="text-align:left;padding-left:20px">
+          <div style="margin-bottom:14px">
+            <span style="display:inline-block;width:80px;font-size:14px;color:#606266">日期筛选</span>
             <el-date-picker v-model="importDateRange" class="import-date-range" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
               start-placeholder="开始日期" end-placeholder="结束日期" clearable />
             <span style="color:#909399;font-size:12px;margin-left:8px">按出车时间筛选，不选则导入全部</span>
-          </el-form-item>
-          <el-form-item label="Excel文件">
+          </div>
+          <div>
+            <span style="display:inline-block;width:80px;font-size:14px;color:#606266">Excel文件</span>
             <input type="file" accept=".xlsx,.xls" @change="onImportFileChange" style="font-size:13px" />
-          </el-form-item>
-        </el-form>
+          </div>
+        </div>
       </template>
       <template v-else>
         <div style="margin-bottom:10px;display:flex;gap:12px;align-items:center">
