@@ -19,6 +19,7 @@
           </div>
           <div style="display:flex;gap:8px;align-items:center">
             <el-button type="success" @click="showApprovalDialog">发起审批</el-button>
+            <el-button type="warning" @click="showImportDialog">导入</el-button>
             <el-button type="primary" @click="showAddDialog">录入任务</el-button>
             <el-button v-if="user.role === 'admin'" @click="showApprovalSettings"><el-icon><SetUp /></el-icon><span style="margin-left:4px">审批设置</span></el-button>
             <el-button v-if="user.role === 'admin'" @click="showSettings"><el-icon><Setting /></el-icon><span style="margin-left:4px">费率</span></el-button>
@@ -272,6 +273,91 @@
     </el-card>
 
     <!-- Add/Edit Task Dialog -->
+    <el-dialog v-model="importDialogVisible" title="导入任务" :width="isMobile ? '100%' : '1100px'" :fullscreen="isMobile">
+      <template v-if="!importPreviewRows.length">
+        <el-form label-width="100px">
+          <el-form-item label="日期筛选">
+            <el-date-picker v-model="importDateRange" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
+              start-placeholder="开始日期" end-placeholder="结束日期" clearable style="width:280px" />
+            <span style="color:#909399;font-size:12px;margin-left:10px">按出车时间筛选，不选则导入全部</span>
+          </el-form-item>
+          <el-form-item label="Excel文件">
+            <input type="file" accept=".xlsx,.xls" @change="onImportFileChange" style="font-size:13px" />
+          </el-form-item>
+        </el-form>
+      </template>
+      <template v-else>
+        <div style="margin-bottom:10px;display:flex;gap:12px;align-items:center">
+          <el-tag type="info">共 {{ importPreviewRows.length }} 条</el-tag>
+          <el-tag type="success">已完成 {{ importPreviewRows.filter(r => r.status === 'completed').length }}</el-tag>
+          <el-tag type="primary">已排班 {{ importPreviewRows.filter(r => r.status === 'scheduled').length }}</el-tag>
+          <el-tag type="warning">待排班 {{ importPreviewRows.filter(r => r.status === 'pending').length }}</el-tag>
+          <el-button size="small" @click="importPreviewRows = []">重新选择文件</el-button>
+        </div>
+        <el-table :data="importPreviewRows" border stripe size="small" max-height="450">
+          <el-table-column type="index" label="#" width="45" align="center" />
+          <el-table-column label="状态" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.status === 'completed'" type="success" size="small">已完成</el-tag>
+              <el-tag v-else-if="row.status === 'scheduled'" type="primary" size="small">已排班</el-tag>
+              <el-tag v-else type="warning" size="small">待排班</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="用车方" width="130">
+            <template #default="{ row }"><el-input v-model="row.client_name" size="small" /></template>
+          </el-table-column>
+          <el-table-column label="出发→目的" width="150">
+            <template #default="{ row }">
+              <el-input v-model="row.departure" size="small" placeholder="出发" style="width:65px" />
+              <span style="color:#909399">→</span>
+              <el-input v-model="row.destination" size="small" placeholder="目的" style="width:65px" :disabled="row.self_drive" />
+            </template>
+          </el-table-column>
+          <el-table-column label="出车时间" width="155">
+            <template #default="{ row }"><el-date-picker v-model="row.departure_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" size="small" style="width:145px" /></template>
+          </el-table-column>
+          <el-table-column label="回程时间" width="155">
+            <template #default="{ row }"><el-date-picker v-model="row.return_time" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" size="small" style="width:145px" /></template>
+          </el-table-column>
+          <el-table-column label="天数" width="80">
+            <template #default="{ row }"><el-input-number v-model="row.rental_days" :min="0" :step="0.5" size="small" controls-position="right" style="width:65px" /></template>
+          </el-table-column>
+          <el-table-column label="租车费" width="100">
+            <template #default="{ row }"><el-input-number v-model="row.rental_fee" :min="0" :precision="2" size="small" controls-position="right" style="width:85px" /></template>
+          </el-table-column>
+          <el-table-column label="车牌号" width="110">
+            <template #default="{ row }">
+              <el-select v-model="row.plate_number" size="small" filterable allow-create default-first-option placeholder="车牌" style="width:100px">
+                <el-option v-for="v in vehicles" :key="v.id" :label="v.plate_number" :value="v.plate_number" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="司机" width="100">
+            <template #default="{ row }">
+              <el-select v-model="row.driver_name" size="small" filterable allow-create default-first-option placeholder="司机" style="width:90px">
+                <el-option v-for="d in drivers" :key="d.id" :label="d.name" :value="d.name" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="类型" width="70" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.self_drive" type="info" size="small">自驾</el-tag>
+              <el-tag v-else-if="row.external_vehicle" type="danger" size="small">外部</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="55" align="center">
+            <template #default="{ $index }">
+              <el-button type="danger" size="small" link @click="importPreviewRows.splice($index, 1)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button @click="importDialogVisible = false">取消</el-button>
+        <el-button v-if="importPreviewRows.length" type="primary" @click="submitImport">确认导入 {{ importPreviewRows.length }} 条</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="taskDialogVisible" :title="isEdit ? (isCompletedEdit ? '编辑任务（需填写修改说明）' : '编辑任务') : '录入任务'" :width="isMobile ? '100%' : '700px'" :fullscreen="isMobile">
       <el-form :model="taskForm" :label-width="isMobile ? '90px' : '110px'">
         <el-row v-if="isCompletedEdit" :gutter="isMobile ? 0 : 20">
@@ -1037,6 +1123,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
 import api from '../utils/api'
+import * as XLSX from 'xlsx-js-style'
 
 const route = useRoute()
 
@@ -1400,6 +1487,164 @@ const loadTasks = async () => {
     }
     const res = await api.get('/tasks', { params })
     tasks.value = res.data
+  } catch (e) {}
+}
+
+// ===== Excel 导入 =====
+const importDialogVisible = ref(false)
+const importDateRange = ref(null)
+const importPreviewRows = ref([])
+
+const showImportDialog = () => {
+  importPreviewRows.value = []
+  importDialogVisible.value = true
+}
+
+const onImportFileChange = (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
+      if (rows.length < 2) { ElMessage.warning('Excel 无数据'); return }
+
+      // 找到表头行（第1行或第2行）
+      let headerRow = 0
+      for (let i = 0; i < Math.min(3, rows.length); i++) {
+        const r = rows[i].map(String)
+        if (r.includes('用车方') || r.includes('出发地点')) { headerRow = i; break }
+      }
+
+      // 列映射（0-indexed，基于模板23列）
+      const dataRows = []
+      for (let i = headerRow + 1; i < rows.length; i++) {
+        const r = rows[i]
+        if (!r || !String(r[4] || '').trim()) continue  // 用车方为空跳过
+
+        // 出车时间：col10(idx9)=日期 + col11(idx10)=时间
+        let depTime = ''
+        const d1 = String(r[9] || '').trim()
+        const t1 = String(r[10] || '').trim()
+        if (d1) {
+          const dPart = d1.slice(0, 10)
+          const tPart = t1 && t1.includes(':') ? t1.slice(0, 5) : '00:00'
+          depTime = dPart + ' ' + tPart
+        }
+        // 回程时间：col12(idx11)=日期 + col13(idx12)=时间
+        let retTime = ''
+        const d2 = String(r[11] || '').trim()
+        const t2 = String(r[12] || '').trim()
+        if (d2) {
+          const dPart = d2.slice(0, 10)
+          const tPart = t2 && t2.includes(':') ? t2.slice(0, 5) : '00:00'
+          retTime = dPart + ' ' + tPart
+        }
+
+        // 天数解析
+        let days = 1
+        const dayStr = String(r[13] || '').trim()
+        if (dayStr) {
+          if (dayStr.includes('半')) days = 0.5
+          else if (dayStr.includes('月')) days = 30
+          else {
+            const m = dayStr.match(/[\d.]+/)
+            if (m) days = parseFloat(m[0]) || 1
+          }
+        }
+
+        // 里程
+        let mileage = parseFloat(String(r[15] || '0').replace(/[=R\d-]/g, '')) || 0
+        const startMi = parseFloat(String(r[16] || '0')) || 0
+        const endMi = parseFloat(String(r[17] || '0')) || 0
+        if (!mileage && endMi > startMi) mileage = endMi - startMi
+
+        // 自驾判断
+        const dest = String(r[6] || '').trim()
+        const drvName = String(r[8] || '').trim()
+        const isSelfDrive = dest === '自驾' || drvName === '自驾'
+
+        // 车属公司 / 外部
+        const company = String(r[19] || '').trim()
+        const INTERNAL = ['大众', '大众司', '国开', '国开司', '国顺', '国顺司']
+        const isExternal = !isSelfDrive && company && !INTERNAL.includes(company)
+
+        // 收款
+        const paidMethod = String(r[20] || '').trim()
+        const isPaid = !!paidMethod
+
+        // 状态推断
+        let status = 'pending'
+        if (startMi > 0 || endMi > 0) status = 'completed'
+        else if (String(r[7] || '').trim()) status = 'scheduled'
+
+        // 车型（核定载人数）
+        const capStr = String(r[18] || '').trim()
+        const capNum = parseInt(capStr) || 0
+
+        dataRows.push({
+          client_name: String(r[4] || '').trim(),
+          departure: String(r[5] || '').trim(),
+          destination: isSelfDrive ? '' : dest,
+          departure_time: depTime,
+          return_time: retTime,
+          rental_days: days,
+          rental_fee: parseFloat(String(r[14] || '0')) || 0,
+          mileage: mileage,
+          start_mileage: startMi,
+          end_mileage: endMi,
+          vehicle_type: capNum ? String(capNum) : capStr,
+          plate_number: String(r[7] || '').trim(),
+          driver_name: isSelfDrive ? '' : drvName,
+          company: company,
+          paid_method: paidMethod,
+          is_paid: isPaid,
+          self_drive: isSelfDrive,
+          external_vehicle: isExternal,
+          contract_no: String(r[2] || '').trim(),
+          invoice_remark: String(r[21] || '').trim(),
+          remark: String(r[0] || '').trim(),
+          status: status
+        })
+      }
+
+      // 日期过滤
+      let filtered = dataRows
+      if (importDateRange.value && importDateRange.value.length === 2) {
+        const [start, end] = importDateRange.value
+        filtered = dataRows.filter(r => {
+          if (!r.departure_time) return true
+          const d = r.departure_time.slice(0, 10)
+          return d >= start && d <= end
+        })
+      }
+
+      if (!filtered.length) { ElMessage.warning('没有符合条件的数据'); return }
+      importPreviewRows.value = filtered
+      ElMessage.success(`解析成功，${filtered.length} 条数据`)
+    } catch (err) {
+      ElMessage.error('解析失败: ' + err.message)
+    }
+  }
+  reader.readAsArrayBuffer(file)
+  e.target.value = ''
+}
+
+const submitImport = async () => {
+  try {
+    const res = await api.post('/tasks/import', { rows: importPreviewRows.value })
+    const { created, errors } = res.data
+    let msg = `导入成功 ${created} 条`
+    if (errors.length) {
+      msg += `，失败 ${errors.length} 条`
+      console.warn('Import errors:', errors)
+    }
+    ElMessage.success(msg)
+    importDialogVisible.value = false
+    importPreviewRows.value = []
+    loadTasks()
   } catch (e) {}
 }
 

@@ -1194,6 +1194,155 @@ def create_task():
     return jsonify({'code': 200, 'msg': '任务创建成功', 'data': task.to_dict()})
 
 
+@app.route('/api/tasks/import', methods=['POST'])
+@permission_required('task')
+def import_tasks():
+    data = request.get_json()
+    rows = data.get('rows', [])
+    if not rows:
+        return jsonify({'code': 400, 'msg': '没有导入数据'})
+
+    INTERNAL_COMPANIES = ['大众司', '国开司', '国顺司']
+    created = []
+    errors = []
+
+    for idx, row in enumerate(rows):
+        try:
+            client_name = (row.get('client_name') or '').strip()
+            if not client_name:
+                errors.append({'row': idx + 1, 'msg': '用车方为空'})
+                continue
+
+            # 解析时间
+            departure_time = None
+            return_time = None
+            if row.get('departure_time'):
+                try:
+                    departure_time = datetime.strptime(row['departure_time'].strip(), '%Y-%m-%d %H:%M')
+                except ValueError:
+                    try:
+                        departure_time = datetime.strptime(row['departure_time'].strip(), '%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        pass
+            if row.get('return_time'):
+                try:
+                    return_time = datetime.strptime(row['return_time'].strip(), '%Y-%m-%d %H:%M')
+                except ValueError:
+                    try:
+                        return_time = datetime.strptime(row['return_time'].strip(), '%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        pass
+
+            rental_days = float(row.get('rental_days') or 1)
+            rental_fee = float(row.get('rental_fee') or 0)
+            mileage = float(row.get('mileage') or 0)
+            start_mileage = float(row.get('start_mileage') or 0)
+            end_mileage = float(row.get('end_mileage') or 0)
+            self_drive = bool(row.get('self_drive'))
+            external_vehicle = bool(row.get('external_vehicle'))
+            vehicle_type = row.get('vehicle_type') or ''
+            plate_number = (row.get('plate_number') or '').strip()
+            driver_name = (row.get('driver_name') or '').strip()
+            company = (row.get('company') or '').strip()
+            paid_method = (row.get('paid_method') or '').strip()
+            is_paid = bool(row.get('is_paid'))
+            invoice_remark = (row.get('invoice_remark') or '').strip()
+            contract_no = (row.get('contract_no') or '').strip()
+            remark = (row.get('remark') or '').strip()
+
+            # 车辆匹配或自动创建
+            vehicle_id = None
+            if plate_number:
+                v = Vehicle.query.filter_by(plate_number=plate_number).first()
+                if not v:
+                    v = Vehicle(plate_number=plate_number, company=company or '', vehicle_type=vehicle_type or '', capacity=vehicle_type or '', status='active')
+                    db.session.add(v)
+                    db.session.flush()
+                vehicle_id = v.id
+                if company and not v.company:
+                    v.company = company
+
+            # 司机匹配或自动创建
+            driver_id = None
+            if driver_name and driver_name != '自驾':
+                d = Driver.query.filter_by(name=driver_name).first()
+                if not d:
+                    d = Driver(name=driver_name, phone='', status='active')
+                    db.session.add(d)
+                    db.session.flush()
+                driver_id = d.id
+
+            # 状态推断
+            if start_mileage or end_mileage:
+                status = 'completed'
+            elif plate_number:
+                status = 'scheduled'
+            else:
+                status = 'pending'
+
+            # 费用
+            external_rental = rental_fee if external_vehicle else 0
+            estimated_cost = rental_fee if external_vehicle else rental_fee
+            estimated_profit = 0 if external_vehicle else rental_fee
+            if external_vehicle:
+                if self_drive:
+                    commission = 50 * rental_days
+                    estimated_profit = round(commission, 2)
+                    estimated_cost = round(rental_fee - commission, 2)
+                else:
+                    estimated_cost = round(rental_fee * 0.9, 2)
+                    estimated_profit = round(rental_fee * 0.1, 2)
+
+            task = Task(
+                client_type='company' if any(k in client_name for k in ['公司', '局', '政府', '办事处', '中心', '学校', '医院', '厂', '集团', '协会']) else 'personal',
+                client_name=client_name,
+                client_phone='',
+                departure=row.get('departure') or '',
+                destination='' if self_drive else (row.get('destination') or ''),
+                vehicle_id=vehicle_id,
+                driver_id=driver_id,
+                vehicle_count=1,
+                self_drive=self_drive,
+                external_vehicle=external_vehicle,
+                vehicle_type=vehicle_type,
+                departure_time=departure_time,
+                return_time=return_time,
+                rental_days=rental_days,
+                mileage=mileage,
+                rental_fee=rental_fee,
+                fuel_fee=0,
+                bridge_fee=0,
+                labor_fee=0,
+                estimated_cost=estimated_cost,
+                estimated_profit=estimated_profit,
+                external_rental=external_rental,
+                start_mileage=start_mileage,
+                end_mileage=end_mileage,
+                is_paid=is_paid,
+                paid_method=paid_method,
+                invoice_remark=invoice_remark,
+                contract_no=contract_no,
+                remark=remark,
+                status=status
+            )
+            db.session.add(task)
+            db.session.flush()
+            task.task_no = f'TASK-{task.created_at.strftime("%Y%m%d")}-{task.id}'
+
+            # 车辆分配记录
+            if vehicle_id:
+                tv = TaskVehicle(task_id=task.id, vehicle_id=vehicle_id, driver_id=driver_id,
+                                 status='scheduled' if status != 'pending' else 'pending')
+                db.session.add(tv)
+
+            created.append({'row': idx + 1, 'task_no': task.task_no, 'client_name': client_name})
+        except Exception as e:
+            errors.append({'row': idx + 1, 'msg': str(e)[:200]})
+
+    db.session.commit()
+    return jsonify({'code': 200, 'data': {'created': len(created), 'errors': errors, 'tasks': created}})
+
+
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
 @permission_required('task', 'report_edit')
 def update_task(task_id):
