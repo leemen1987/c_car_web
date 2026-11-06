@@ -2197,7 +2197,8 @@ def report_by_vehicle():
     elif client_type:
         query = query.filter(Task.client_type == client_type)
     if company:
-        query = query.join(Vehicle, Task.vehicle_id == Vehicle.id).filter(Vehicle.company == company)
+        companies = [c for c in company.split(',') if c]
+        query = query.join(Vehicle, Task.vehicle_id == Vehicle.id).filter(Vehicle.company.in_(companies))
     if vehicle_id:
         query = query.filter(Task.vehicle_id == vehicle_id)
     if paid_method:

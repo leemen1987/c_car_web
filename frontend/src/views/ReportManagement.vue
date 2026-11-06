@@ -289,7 +289,7 @@
               </el-select>
             </el-form-item>
             <el-form-item label="车属单位">
-              <el-select v-model="vehicleQuery.company" placeholder="全部" clearable filterable style="width:160px" @change="onVehicleCompanyChange">
+              <el-select v-model="vehicleQuery.company" placeholder="全部" clearable filterable multiple style="width:200px" @change="onVehicleCompanyChange">
                 <el-option v-for="c in vehicleCompanyOptions" :key="c" :label="c" :value="c" />
               </el-select>
             </el-form-item>
@@ -313,6 +313,13 @@
             </el-form-item>
           </el-form>
 
+          <el-descriptions v-if="vehicleResults.length" :column="3" border style="margin-bottom:15px">
+            <el-descriptions-item label="总任务数">{{ vehicleSummary.totalTasks }}</el-descriptions-item>
+            <el-descriptions-item label="总租车费">¥{{ vehicleSummary.totalRental.toFixed(2) }}</el-descriptions-item>
+            <el-descriptions-item label="总利润">
+              <span :style="{ color: vehicleSummary.totalProfit >= 0 ? '#67c23a' : '#f56c6c' }">¥{{ vehicleSummary.totalProfit.toFixed(2) }}</span>
+            </el-descriptions-item>
+          </el-descriptions>
           <div v-for="(vs, idx) in vehicleResults" :key="idx" style="margin-bottom:20px">
             <el-descriptions :column="4" border style="margin-bottom:10px">
               <el-descriptions-item label="车牌号">{{ vs.plate_number }}</el-descriptions-item>
@@ -678,7 +685,7 @@ const driverQuery = ref({ driver_id: null, client_type: '', paid_method: '', is_
 const driverResults = ref([])
 const allDrivers = ref([])
 
-const vehicleQuery = ref({ vehicle_id: null, client_type: '', company: '', paid_method: '', is_paid: '', is_invoiced: '', month: '', year: '', dateRange: null })
+const vehicleQuery = ref({ vehicle_id: null, client_type: '', company: [], paid_method: '', is_paid: '', is_invoiced: '', month: '', year: '', dateRange: null })
 const vehicleCompanyOptions = computed(() => {
   const names = new Set()
   for (const v of allVehicles.value) {
@@ -687,8 +694,18 @@ const vehicleCompanyOptions = computed(() => {
   return [...names].sort()
 })
 const filteredVehiclesForQuery = computed(() => {
-  if (!vehicleQuery.value.company) return allVehicles.value
-  return allVehicles.value.filter(v => v.company === vehicleQuery.value.company)
+  const sel = vehicleQuery.value.company
+  if (!sel || !sel.length) return allVehicles.value
+  return allVehicles.value.filter(v => sel.includes(v.company))
+})
+const vehicleSummary = computed(() => {
+  let tasks = 0, rental = 0, profit = 0
+  for (const vs of vehicleResults.value) {
+    tasks += vs.task_count || 0
+    rental += vs.total_rental_fee || 0
+    profit += vs.total_final_profit || 0
+  }
+  return { totalTasks: tasks, totalRental: rental, totalProfit: profit }
 })
 const onVehicleCompanyChange = () => {
   vehicleQuery.value.vehicle_id = null
@@ -737,7 +754,7 @@ const queryByDriver = async () => {
 const queryByVehicle = async () => {
   const params = {}
   if (vehicleQuery.value.vehicle_id) params.vehicle_id = vehicleQuery.value.vehicle_id
-  if (vehicleQuery.value.company) params.company = vehicleQuery.value.company
+  if (vehicleQuery.value.company && vehicleQuery.value.company.length) params.company = vehicleQuery.value.company.join(',')
   if (vehicleQuery.value.client_type) params.client_type = vehicleQuery.value.client_type
   if (vehicleQuery.value.paid_method) params.paid_method = vehicleQuery.value.paid_method
   if (vehicleQuery.value.is_paid) params.is_paid = vehicleQuery.value.is_paid
