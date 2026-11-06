@@ -276,7 +276,7 @@
     <el-dialog v-model="importDialogVisible" title="导入任务" :width="isMobile ? '100%' : '1100px'" :fullscreen="isMobile">
       <template v-if="!importPreviewRows.length">
         <el-form label-width="100px">
-          <el-form-item label="日期筛选">
+          <el-form-item label="日期筛选" class="import-date-item">
             <el-date-picker v-model="importDateRange" class="import-date-range" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
               start-placeholder="开始日期" end-placeholder="结束日期" clearable />
             <span style="color:#909399;font-size:12px;margin-left:8px">按出车时间筛选，不选则导入全部</span>
@@ -2438,6 +2438,11 @@ onMounted(async () => {
   width: 220px !important;
   max-width: 220px !important;
   margin-left: 0 !important;
+}
+:deep(.import-date-item .el-form-item__content) {
+  display: flex !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
 }
 :deep(.import-date-range .el-input__wrapper) {
   padding-left: 4px !important;
