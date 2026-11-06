@@ -2437,6 +2437,11 @@ onMounted(async () => {
 :deep(.import-date-range) {
   width: 220px !important;
   max-width: 220px !important;
+  margin-left: 0 !important;
+}
+:deep(.import-date-range .el-input__wrapper) {
+  padding-left: 4px !important;
+  margin-left: 0 !important;
 }
 :deep(.import-date-range .el-range-input) {
   font-size: 12px;
