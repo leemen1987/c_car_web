@@ -1491,6 +1491,26 @@ const loadTasks = async () => {
 }
 
 // ===== Excel 导入 =====
+const fmtDate = (v) => {
+  if (v instanceof Date) {
+    return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0')
+  }
+  const s = String(v || '').trim()
+  // 兼容中文日期格式 2022年11月29日
+  const m = s.match(/(\d{4})[年\/-](\d{1,2})[月\/-](\d{1,2})/)
+  if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0')
+  return s.slice(0, 10)
+}
+const fmtTime = (v) => {
+  if (v instanceof Date) {
+    return String(v.getHours()).padStart(2, '0') + ':' + String(v.getMinutes()).padStart(2, '0')
+  }
+  const s = String(v || '').trim()
+  const m = s.match(/(\d{1,2}):(\d{2})/)
+  if (m) return m[1].padStart(2, '0') + ':' + m[2]
+  return '00:00'
+}
+
 const importDialogVisible = ref(false)
 const importDateRange = ref(null)
 const importPreviewRows = ref([])
@@ -1506,7 +1526,7 @@ const onImportFileChange = (e) => {
   const reader = new FileReader()
   reader.onload = (ev) => {
     try {
-      const wb = XLSX.read(ev.target.result, { type: 'array' })
+      const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: true })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
       if (rows.length < 2) { ElMessage.warning('Excel 无数据'); return }
@@ -1526,22 +1546,14 @@ const onImportFileChange = (e) => {
 
         // 出车时间：col10(idx9)=日期 + col11(idx10)=时间
         let depTime = ''
-        const d1 = String(r[9] || '').trim()
-        const t1 = String(r[10] || '').trim()
-        if (d1) {
-          const dPart = d1.slice(0, 10)
-          const tPart = t1 && t1.includes(':') ? t1.slice(0, 5) : '00:00'
-          depTime = dPart + ' ' + tPart
-        }
+        const d1 = fmtDate(r[9])
+        const t1 = fmtTime(r[10])
+        if (d1) depTime = d1 + ' ' + t1
         // 回程时间：col12(idx11)=日期 + col13(idx12)=时间
         let retTime = ''
-        const d2 = String(r[11] || '').trim()
-        const t2 = String(r[12] || '').trim()
-        if (d2) {
-          const dPart = d2.slice(0, 10)
-          const tPart = t2 && t2.includes(':') ? t2.slice(0, 5) : '00:00'
-          retTime = dPart + ' ' + tPart
-        }
+        const d2 = fmtDate(r[11])
+        const t2 = fmtTime(r[12])
+        if (d2) retTime = d2 + ' ' + t2
 
         // 天数解析
         let days = 1
