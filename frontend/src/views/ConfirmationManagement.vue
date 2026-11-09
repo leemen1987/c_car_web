@@ -110,8 +110,7 @@
         <el-button @click="columnDialogVisible = false">取消</el-button>
         <el-button v-if="columnDialogMode === 'send'" type="primary" @click="sendBatch" :disabled="!sendTargets.length || !selectedColumns.length">发送</el-button>
         <el-button v-if="columnDialogMode === 'export'" type="success" @click="exportExcel">下载Excel</el-button>
-        <el-button v-if="columnDialogMode === 'image'" type="warning" @click="copyImageToClipboard">复制图片</el-button>
-        <el-button v-if="columnDialogMode === 'image'" @click="downloadImage">下载图片</el-button>
+        <el-button v-if="columnDialogMode === 'image'" type="warning" @click="downloadImage">下载图片</el-button>
         <el-button v-if="columnDialogMode === 'image' && sendTargets.length" type="primary" @click="sendImage">发企微</el-button>
       </template>
     </el-dialog>
@@ -121,7 +120,6 @@
       <img v-if="imageDataUrl" :src="imageDataUrl" style="width:100%;border:1px solid #e2e8f0;border-radius:6px" />
       <template #footer>
         <el-button @click="imageResultVisible = false">关闭</el-button>
-        <el-button type="primary" @click="copyImageToClipboard">复制图片</el-button>
         <el-button @click="downloadImage">下载图片</el-button>
         <el-button v-if="sendTargets.length" type="success" @click="sendImage">发企微</el-button>
       </template>
@@ -296,49 +294,7 @@ const getExportFileName = (ext) => {
   return parts.join('_') + '_' + dateStr + '.' + ext
 }
 
-const copyImageToClipboard = async () => {
-  if (!imageDataUrl.value) {
-    imageDataUrl.value = await generateImage()
-    if (!imageDataUrl.value) { ElMessage.error('图片生成失败'); return }
-  }
-  try {
-    // 从 dataUrl 创建 canvas 并获取正确 MIME 的 blob
-    const img = new Image()
-    img.src = imageDataUrl.value
-    await new Promise((r) => { img.onload = r; img.onerror = r })
-    const canvas = document.createElement('canvas')
-    canvas.width = img.naturalWidth || img.width
-    canvas.height = img.naturalHeight || img.height
-    canvas.getContext('2d').drawImage(img, 0, 0)
-    const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'))
-    if (!blob) { ElMessage.error('图片生成失败'); return }
 
-    // HTTPS 用 ClipboardItem
-    if (navigator.clipboard && window.isSecureContext && typeof ClipboardItem !== 'undefined') {
-      try {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-        ElMessage.success('图片已复制到剪贴板，可直接在微信粘贴')
-        return
-      } catch (e) {}
-    }
-    // HTTP fallback: copy事件 + execCommand
-    const handler = (e) => {
-      e.clipboardData.items.add(blob, 'image/png')
-      e.preventDefault()
-      document.removeEventListener('copy', handler)
-    }
-    document.addEventListener('copy', handler)
-    const ok = document.execCommand('copy')
-    document.removeEventListener('copy', handler)
-    if (ok) {
-      ElMessage.success('图片已复制到剪贴板，可直接在微信粘贴')
-    } else {
-      ElMessage.warning('浏览器不支持剪贴板复制，请用下载图片功能')
-    }
-  } catch (e) {
-    ElMessage.warning('浏览器不支持剪贴板复制，请用下载图片功能')
-  }
-}
 
 const sendImage = async () => {
   if (!imageDataUrl.value) {
