@@ -110,7 +110,8 @@
         <el-button @click="columnDialogVisible = false">取消</el-button>
         <el-button v-if="columnDialogMode === 'send'" type="primary" @click="sendBatch" :disabled="!sendTargets.length || !selectedColumns.length">发送</el-button>
         <el-button v-if="columnDialogMode === 'export'" type="success" @click="exportExcel">下载Excel</el-button>
-        <el-button v-if="columnDialogMode === 'image'" type="warning" @click="downloadImage">下载图片</el-button>
+        <el-button v-if="columnDialogMode === 'image'" type="warning" @click="previewImage">预览图片</el-button>
+        <el-button v-if="columnDialogMode === 'image'" @click="downloadImage">下载图片</el-button>
         <el-button v-if="columnDialogMode === 'image' && sendTargets.length" type="primary" @click="sendImage">发企微</el-button>
       </template>
     </el-dialog>
@@ -270,6 +271,12 @@ const generateImage = () => {
       }).catch(() => { el.style.cssText = origStyle; resolve('') })
     }).catch(() => { el.style.cssText = origStyle; resolve('') })
   })
+}
+
+const previewImage = async () => {
+  imageDataUrl.value = await generateImage()
+  if (!imageDataUrl.value) { ElMessage.error('图片生成失败（需安装html2canvas）'); return }
+  imageResultVisible.value = true
 }
 
 const downloadImage = async () => {
