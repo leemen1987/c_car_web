@@ -17,6 +17,8 @@
         </el-table-column>
         <el-table-column prop="departure_time" label="出车" width="110" />
         <el-table-column prop="return_time" label="回程" width="110" />
+        <el-table-column prop="rental_days" label="天数" width="60" align="center" />
+        <el-table-column prop="rental_fee" label="租车费" width="90" align="right" />
         <el-table-column label="车牌/司机" min-width="120">
           <template #default="{ row }">
             <div v-if="row.task_vehicles && row.task_vehicles.length">
@@ -38,6 +40,9 @@
       </el-table>
       <el-empty v-else description="暂无任务数据" />
     </el-card>
+    <div style="text-align:center;margin-top:12px;color:#909399;font-size:12px">
+      包车调度系统 · 任务汇总
+    </div>
   </div>
 </template>
 
@@ -60,12 +65,11 @@ onMounted(async () => {
         if (k && v) params[decodeURIComponent(k)] = decodeURIComponent(v)
       }
     }
-    // 默认显示已排班+已完成
     if (!params.status) params.status = 'scheduled'
     const res = await api.get('/tasks/filtered', { params })
     tasks.value = res.data
   } catch (e) {
-    // 公开页面可能没登录，显示空
+    // 公开页面可能未登录，显示空
   }
 })
 </script>

@@ -78,6 +78,34 @@ class WxWorkClient:
 
         return self._post_request(api_url, data)
 
+    def send_external_text_message(self, external_userid, sender, content):
+        """发送纯文本消息给外部联系人（微信客户）
+
+        API文档: https://developer.work.weixin.qq.com/document/path/95818
+        """
+        token = self.get_access_token()
+        api_url = f'https://qyapi.weixin.qq.com/cgi-bin/externalcontact/message/send?access_token={token}'
+        data = {
+            "chat_type": "single",
+            "external_userid": [external_userid],
+            "sender": sender,
+            "text": {
+                "content": content
+            }
+        }
+        try:
+            json_data = json.dumps(data, ensure_ascii=False).encode('utf-8')
+            req = urllib.request.Request(
+                api_url,
+                data=json_data,
+                headers={'Content-Type': 'application/json'}
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result
+        except Exception as e:
+            return {"errcode": -1, "errmsg": str(e)}
+
     def send_external_link_message(self, external_userid, sender, title, description, url, picurl=''):
         """发送链接消息给外部联系人（微信客户）
 

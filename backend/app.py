@@ -3009,23 +3009,31 @@ def send_batch_confirm():
     user = User.query.get(session['user_id'])
     sender = user.wx_sender if user and user.wx_sender else ''
     summary_url = f"{app.config.get('CONFIRM_BASE_URL', '').rstrip('/')}/summary"
+
+    # 生成纯文本表格（给外部联系人）
+    col_names = [col_defs[c][0] for c in columns if c in col_defs]
+    txt_lines = [f"📋 任务通知 ({len(tasks)}条)"]
+    txt_lines.append('─' * 30)
+    txt_lines.append(' | '.join(col_names))
+    txt_lines.append('─' * 30)
+    for t in tasks:
+        vals = [col_defs[c][1](t) for c in columns if c in col_defs]
+        txt_lines.append(' | '.join(vals))
+    txt_lines.append('─' * 30)
+    txt_lines.append(f'📊 查看完整数据: {summary_url}')
+    txt_content = '\n'.join(txt_lines)
+
     results = []
     for target in targets:
         try:
             if target.get('type') == 'user':
                 r = wx_client.send_markdown_message(target['id'], md_content)
             else:
-                # 外部联系人不支持markdown，用link卡片+表格文本
+                # 外部联系人：纯文本表格
                 if not sender:
-                    results.append({'target': target, 'success': False, 'msg': '当前用户未配置企微sender'})
+                    results.append({'target': target, 'success': False, 'msg': '当前用户未配置企微UserID（权限控制→编辑用户）'})
                     continue
-                text = f"📋 任务通知 ({len(tasks)}条)\n" + md_content
-                r = wx_client.send_external_link_message(
-                    target['id'], sender,
-                    f'任务通知({len(tasks)}条)', 
-                    text[:120] + '...',
-                    summary_url
-                )
+                r = wx_client.send_external_text_message(target['id'], sender, txt_content)
             results.append({'target': target, 'success': r.get('errcode', 1) == 0, 'msg': r.get('errmsg', '')})
         except Exception as e:
             results.append({'target': target, 'success': False, 'msg': str(e)[:100]})
