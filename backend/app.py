@@ -1075,6 +1075,42 @@ def list_tasks():
     return jsonify({'code': 200, 'data': [t.to_dict() for t in tasks]})
 
 
+@app.route('/api/tasks/filtered', methods=['GET'])
+@login_required
+def list_filtered_tasks():
+    status = request.args.get('status', '')
+    client = request.args.get('client', '')
+    company = request.args.get('company', '')
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+
+    query = Task.query.options(
+        selectinload(Task.task_vehicles).selectinload(TaskVehicle.vehicle),
+        selectinload(Task.task_vehicles).selectinload(TaskVehicle.driver),
+        selectinload(Task.vehicle),
+        selectinload(Task.driver),
+        selectinload(Task.client),
+        selectinload(Task.contact),
+    )
+    if status and status != 'all':
+        query = query.filter(Task.status == status)
+    if client:
+        query = query.filter(db.or_(
+            Task.client_name.like(f'%{client}%'),
+            Task.client.has(Client.name.like(f'%{client}%'))
+        ))
+    if company:
+        companies = [c for c in company.split(',') if c]
+        query = query.join(Vehicle, Task.vehicle_id == Vehicle.id).filter(Vehicle.company.in_(companies))
+    if start_date:
+        query = query.filter(Task.departure_time >= start_date)
+    if end_date:
+        query = query.filter(Task.departure_time <= end_date + ' 23:59:59')
+
+    tasks = query.order_by(Task.departure_time.desc(), Task.created_at.desc()).limit(1000).all()
+    return jsonify({'code': 200, 'data': [t.to_dict() for t in tasks]})
+
+
 @app.route('/api/tasks/<int:task_id>/change-log', methods=['GET'])
 @login_required
 def get_task_change_log(task_id):
@@ -2924,6 +2960,111 @@ def get_task_confirmation(task_id):
         'code': 200,
         'data': confirmation.to_dict()
     })
+
+
+@app.route('/api/confirmations/send-batch', methods=['POST'])
+@permission_required('task')
+def send_batch_confirm():
+    data = request.get_json()
+    task_ids = data.get('task_ids', [])
+    columns = data.get('columns', [])
+    targets = data.get('targets', [])  # [{type:'user'|'external', id:'xxx'}]
+    if not task_ids:
+        return jsonify({'code': 400, 'msg': '请选择任务'})
+    if not targets:
+        return jsonify({'code': 400, 'msg': '请选择收件人'})
+
+    tasks = Task.query.filter(Task.id.in_(task_ids)).all()
+    if not tasks:
+        return jsonify({'code': 400, 'msg': '任务不存在'})
+
+    # 构建 markdown 表格
+    col_defs = {
+        'task_no': ('任务编号', lambda t: t.task_no or ''),
+        'client_name': ('用车方', lambda t: t.client.name if t.client else (t.client_name or '')),
+        'route': ('出发→目的', lambda t: f"{t.departure or ''}→{t.destination or ''}"),
+        'departure_time': ('出车时间', lambda t: t.departure_time.strftime('%m-%d %H:%M') if t.departure_time else ''),
+        'return_time': ('回程时间', lambda t: t.return_time.strftime('%m-%d %H:%M') if t.return_time else ''),
+        'rental_days': ('天数', lambda t: str(t.rental_days or '')),
+        'rental_fee': ('租车费', lambda t: f"¥{t.rental_fee or 0}"),
+        'plate': ('车牌号', lambda t: ', '.join(f"{i+1}.{tv.vehicle.plate_number}" for i, tv in enumerate(t.task_vehicles) if tv.vehicle) or (t.vehicle.plate_number if t.vehicle else '')),
+        'driver': ('司机', lambda t: ', '.join(f"{i+1}.{tv.driver.name}" for i, tv in enumerate(t.task_vehicles) if tv.driver) or (t.driver.name if t.driver else '')),
+        'company': ('车属公司', lambda t: t.vehicle.company if t.vehicle else ''),
+        'status': ('状态', lambda t: {'pending':'待排班','scheduled':'已排班','completed':'已完成','cancelled':'已取消'}.get(t.status, t.status)),
+        'paid': ('收款', lambda t: '已收' if t.is_paid else '未收'),
+        'remark': ('备注', lambda t: t.remark or ''),
+    }
+    if not columns:
+        columns = ['task_no', 'client_name', 'route', 'departure_time', 'plate', 'driver', 'status']
+
+    headers = [col_defs[c][0] for c in columns if c in col_defs]
+    lines = [f"| {' | '.join(headers)} |", f"| {' | '.join(['---'] * len(headers))} |"]
+    for t in tasks:
+        vals = [col_defs[c][1](t) for c in columns if c in col_defs]
+        lines.append(f"| {' | '.join(vals)} |")
+
+    md_content = f"**📋 任务通知** ({len(tasks)}条)\n\n" + '\n'.join(lines)
+
+    wx_client = get_wx_work_client()
+    results = []
+    for target in targets:
+        try:
+            if target.get('type') == 'user':
+                r = wx_client.send_markdown_message(target['id'], md_content)
+            else:
+                r = wx_client.send_markdown_message(target['id'], md_content)
+            results.append({'target': target, 'success': r.get('errcode', 1) == 0, 'msg': r.get('errmsg', '')})
+        except Exception as e:
+            results.append({'target': target, 'success': False, 'msg': str(e)[:100]})
+
+    success = sum(1 for r in results if r['success'])
+    return jsonify({'code': 200, 'data': {'sent': success, 'failed': len(results) - success, 'results': results}})
+
+
+@app.route('/api/wechat/upload-image', methods=['POST'])
+@permission_required('task')
+def upload_wechat_image():
+    data = request.get_json()
+    image_b64 = data.get('image', '')
+    if not image_b64:
+        return jsonify({'code': 400, 'msg': '缺少图片数据'})
+    try:
+        wx_client = get_wx_work_client()
+        result = wx_client.upload_temp_image(image_b64)
+        if result.get('errcode', 1) == 0:
+            return jsonify({'code': 200, 'data': {'media_id': result['media_id']}})
+        return jsonify({'code': 500, 'msg': result.get('errmsg', '上传失败')})
+    except Exception as e:
+        return jsonify({'code': 500, 'msg': str(e)[:200]})
+
+
+@app.route('/api/wechat/send-image', methods=['POST'])
+@permission_required('task')
+def send_wechat_image():
+    data = request.get_json()
+    media_id = data.get('media_id', '')
+    targets = data.get('targets', [])
+    if not media_id or not targets:
+        return jsonify({'code': 400, 'msg': '缺少参数'})
+    wx_client = get_wx_work_client()
+    results = []
+    for target in targets:
+        try:
+            r = wx_client.send_image_message(target['id'], media_id)
+            results.append({'target': target, 'success': r.get('errcode', 1) == 0, 'msg': r.get('errmsg', '')})
+        except Exception as e:
+            results.append({'target': target, 'success': False, 'msg': str(e)[:100]})
+    success = sum(1 for r in results if r['success'])
+    return jsonify({'code': 200, 'data': {'sent': success, 'failed': len(results) - success}})
+
+
+@app.route('/api/confirmations/summary-link', methods=['GET'])
+@login_required
+def get_summary_link():
+    import uuid
+    token = uuid.uuid4().hex[:32]
+    url = f"/confirm/{token}"
+    return jsonify({'code': 200, 'data': {'url': url, 'full_url': request.host_url.rstrip('/') + url}})
 
 
 @app.route('/api/confirmations', methods=['GET'])

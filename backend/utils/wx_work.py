@@ -218,6 +218,35 @@ class WxWorkClient:
 
         return self._post_request(url, data)
 
+    def upload_temp_image(self, image_base64):
+        """上传临时图片素材，返回media_id"""
+        import base64
+        token = self.get_access_token()
+        url = f'https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={token}&type=image'
+        boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW'
+        body = (
+            f'--{boundary}\r\n'
+            f'Content-Disposition: form-data; name="media"; filename="table.png"\r\n'
+            f'Content-Type: image/png\r\n\r\n'
+        ).encode() + base64.b64decode(image_base64) + f'\r\n--{boundary}--\r\n'.encode()
+        req = urllib.request.Request(url, data=body, headers={
+            'Content-Type': f'multipart/form-data; boundary={boundary}'
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+
+    def send_image_message(self, userid, media_id):
+        """发送图片消息"""
+        token = self.get_access_token()
+        url = f'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}'
+        data = {
+            "touser": userid,
+            "msgtype": "image",
+            "agentid": self.agent_id,
+            "image": {"media_id": media_id}
+        }
+        return self._post_request(url, data)
+
     def _post_request(self, url, data):
         """发送POST请求"""
         try:
