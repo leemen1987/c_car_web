@@ -128,14 +128,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as XLSX from 'xlsx-js-style'
 import api from '../utils/api'
 
 const tasks = ref([])
 const selectedRows = ref([])
-const filter = ref({ status: '', dateRange: null, client: '', company: [] })
+const filter = ref({ status: 'scheduled', dateRange: null, client: '', company: [] })
 const clientOptions = ref([])
 const companyOptions = ref([])
 const wxUsers = ref([])
@@ -156,8 +156,10 @@ const columnDefs = {
   paid: { label: '收款' },
   remark: { label: '备注' }
 }
-const selectedColumns = ref(['task_no', 'client_name', 'route', 'departure_time', 'plate', 'driver', 'status'])
+const savedCols = localStorage.getItem('confirm_selected_columns')
+const selectedColumns = ref(savedCols ? JSON.parse(savedCols) : ['task_no', 'client_name', 'route', 'departure_time', 'plate', 'driver', 'status'])
 
+watch(selectedColumns, (v) => { localStorage.setItem('confirm_selected_columns', JSON.stringify(v)) }, { deep: true })
 const columnDialogVisible = ref(false)
 const columnDialogMode = ref('send') // send | export | image
 const sendTargets = ref([])
@@ -319,16 +321,23 @@ onMounted(async () => {
     wxUsers.value = (res.data || []).filter(u => u.wx_sender).map(u => ({ id: u.wx_sender, name: u.username }))
   } catch (e) {}
   try {
-    const res = await api.get('/wx-external-contacts')
-    wxContacts.value = res.data || []
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const sender = user.wx_sender || ''
+    if (sender) {
+      const res = await api.get('/wx-external-contacts', { params: { sender } })
+      wxContacts.value = res.data || []
+    }
   } catch (e) {}
 })
 </script>
 
 <style scoped>
+:deep(.el-date-editor.confirm-date-range),
+:deep(.confirm-date-range.el-range-editor),
 :deep(.confirm-date-range) {
   width: 220px !important;
   max-width: 220px !important;
+  min-width: 220px !important;
 }
 :deep(.confirm-date-range .el-range-input) {
   font-size: 12px;
