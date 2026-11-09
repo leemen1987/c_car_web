@@ -3063,8 +3063,9 @@ def send_wechat_image():
 def get_summary_link():
     import uuid
     token = uuid.uuid4().hex[:32]
+    base = app.config.get('CONFIRM_BASE_URL', '').rstrip('/')
     url = f"/confirm/{token}"
-    return jsonify({'code': 200, 'data': {'url': url, 'full_url': request.host_url.rstrip('/') + url}})
+    return jsonify({'code': 200, 'data': {'url': url, 'full_url': f'{base}{url}'}})
 
 
 @app.route('/api/confirmations', methods=['GET'])

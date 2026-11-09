@@ -25,7 +25,7 @@
           <el-option label="已取消" value="cancelled" />
         </el-select>
         <el-date-picker v-model="filter.dateRange" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
-          start-placeholder="开始日期" end-placeholder="结束日期" clearable style="--el-date-editor-daterange-width:220px;width:220px" @change="loadTasks" />
+          start-placeholder="开始日期" end-placeholder="结束日期" clearable class="import-date-range" @change="loadTasks" />
         <el-select v-model="filter.client" placeholder="用车方" clearable filterable style="width:160px" @change="loadTasks">
           <el-option v-for="c in clientOptions" :key="c" :label="c" :value="c" />
         </el-select>
@@ -353,19 +353,16 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-:deep(.el-date-editor.confirm-date-range),
-:deep(.confirm-date-range.el-range-editor),
-:deep(.confirm-date-range) {
+:deep(.import-date-range) {
   width: 220px !important;
   max-width: 220px !important;
-  min-width: 220px !important;
 }
-:deep(.confirm-date-range .el-range-input) {
+:deep(.import-date-range .el-range-input) {
   font-size: 12px;
   width: 72px !important;
   min-width: 60px !important;
 }
-:deep(.confirm-date-range .el-range-separator) {
+:deep(.import-date-range .el-range-separator) {
   width: 20px !important;
   padding: 0 !important;
 }
