@@ -3006,13 +3006,26 @@ def send_batch_confirm():
     md_content = f"**📋 任务通知** ({len(tasks)}条)\n\n" + '\n'.join(lines)
 
     wx_client = get_wx_work_client()
+    user = User.query.get(session['user_id'])
+    sender = user.wx_sender if user and user.wx_sender else ''
+    summary_url = f"{app.config.get('CONFIRM_BASE_URL', '').rstrip('/')}/summary"
     results = []
     for target in targets:
         try:
             if target.get('type') == 'user':
                 r = wx_client.send_markdown_message(target['id'], md_content)
             else:
-                r = wx_client.send_markdown_message(target['id'], md_content)
+                # 外部联系人不支持markdown，用link卡片+表格文本
+                if not sender:
+                    results.append({'target': target, 'success': False, 'msg': '当前用户未配置企微sender'})
+                    continue
+                text = f"📋 任务通知 ({len(tasks)}条)\n" + md_content
+                r = wx_client.send_external_link_message(
+                    target['id'], sender,
+                    f'任务通知({len(tasks)}条)', 
+                    text[:120] + '...',
+                    summary_url
+                )
             results.append({'target': target, 'success': r.get('errcode', 1) == 0, 'msg': r.get('errmsg', '')})
         except Exception as e:
             results.append({'target': target, 'success': False, 'msg': str(e)[:100]})
@@ -3064,7 +3077,7 @@ def get_summary_link():
     import uuid
     token = uuid.uuid4().hex[:32]
     base = app.config.get('CONFIRM_BASE_URL', '').rstrip('/')
-    url = f"/confirm/{token}"
+    url = f"/summary/{token}"
     return jsonify({'code': 200, 'data': {'url': url, 'full_url': f'{base}{url}'}})
 
 

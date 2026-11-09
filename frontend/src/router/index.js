@@ -4,6 +4,7 @@ const routes = [
   { path: '/login', name: 'Login', component: () => import('../views/Login.vue') },
   { path: '/confirm/:token', name: 'ConfirmSchedule', component: () => import('../views/ConfirmSchedule.vue') },
   { path: '/approval/:token', name: 'Approval', component: () => import('../views/ApprovalPage.vue') },
+  { path: '/summary/:token', name: 'Summary', component: () => import('../views/SummaryPage.vue') },
   {
     path: '/',
     component: () => import('../views/Layout.vue'),
