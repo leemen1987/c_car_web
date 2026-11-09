@@ -252,7 +252,7 @@ const exportExcel = () => {
   }
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '任务通知')
-  XLSX.writeFile(wb, `任务通知_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  XLSX.writeFile(wb, getExportFileName('xlsx'))
   ElMessage.success('Excel已下载')
   columnDialogVisible.value = false
 }
@@ -281,9 +281,19 @@ const downloadImage = async () => {
   }
   const a = document.createElement('a')
   a.href = imageDataUrl.value
-  a.download = `任务通知_${new Date().toISOString().slice(0, 10)}.png`
+  a.download = getExportFileName('png')
   a.click()
   ElMessage.success('图片已下载')
+}
+
+const getExportFileName = (ext) => {
+  const parts = []
+  if (filter.value.company.length) parts.push(filter.value.company.join('+'))
+  if (filter.value.client) parts.push(filter.value.client)
+  const first = targetTasks.value[0]
+  const dateStr = first && first.departure_time ? first.departure_time.slice(0, 10) : new Date().toISOString().slice(0, 10)
+  if (!parts.length) parts.push('任务通知')
+  return parts.join('_') + '_' + dateStr + '.' + ext
 }
 
 const copyImageToClipboard = async () => {
@@ -292,9 +302,18 @@ const copyImageToClipboard = async () => {
     if (!imageDataUrl.value) { ElMessage.error('图片生成失败'); return }
   }
   try {
-    const res = await fetch(imageDataUrl.value)
-    const blob = await res.blob()
-    // HTTPS 环境用 ClipboardItem
+    // 从 dataUrl 创建 canvas 并获取正确 MIME 的 blob
+    const img = new Image()
+    img.src = imageDataUrl.value
+    await new Promise((r) => { img.onload = r; img.onerror = r })
+    const canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth || img.width
+    canvas.height = img.naturalHeight || img.height
+    canvas.getContext('2d').drawImage(img, 0, 0)
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'))
+    if (!blob) { ElMessage.error('图片生成失败'); return }
+
+    // HTTPS 用 ClipboardItem
     if (navigator.clipboard && window.isSecureContext && typeof ClipboardItem !== 'undefined') {
       try {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
@@ -302,7 +321,7 @@ const copyImageToClipboard = async () => {
         return
       } catch (e) {}
     }
-    // HTTP 环境 fallback: copy事件 + execCommand
+    // HTTP fallback: copy事件 + execCommand
     const handler = (e) => {
       e.clipboardData.items.add(blob, 'image/png')
       e.preventDefault()
