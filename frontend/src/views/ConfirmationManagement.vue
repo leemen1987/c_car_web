@@ -261,11 +261,16 @@ const generateImage = () => {
   return new Promise((resolve) => {
     const el = imagePreview.value
     if (!el) { resolve(''); return }
+    // 临时展开表格，避免截断
+    const origStyle = el.style.cssText
+    el.style.maxHeight = 'none'
+    el.style.overflow = 'visible'
     import('html2canvas').then(({ default: html2canvas }) => {
-      html2canvas(el, { scale: 2, backgroundColor: '#fff' }).then(canvas => {
+      html2canvas(el, { scale: 2, backgroundColor: '#fff', height: el.scrollHeight, windowHeight: el.scrollHeight }).then(canvas => {
+        el.style.cssText = origStyle
         resolve(canvas.toDataURL('image/png'))
-      }).catch(() => resolve(''))
-    }).catch(() => resolve(''))
+      }).catch(() => { el.style.cssText = origStyle; resolve('') })
+    }).catch(() => { el.style.cssText = origStyle; resolve('') })
   })
 }
 
@@ -289,10 +294,29 @@ const copyImageToClipboard = async () => {
   try {
     const res = await fetch(imageDataUrl.value)
     const blob = await res.blob()
-    await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
-    ElMessage.success('图片已复制到剪贴板，可直接在微信粘贴')
+    // HTTPS 环境用 ClipboardItem
+    if (navigator.clipboard && window.isSecureContext && typeof ClipboardItem !== 'undefined') {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        ElMessage.success('图片已复制到剪贴板，可直接在微信粘贴')
+        return
+      } catch (e) {}
+    }
+    // HTTP 环境 fallback: copy事件 + execCommand
+    const handler = (e) => {
+      e.clipboardData.items.add(blob, 'image/png')
+      e.preventDefault()
+      document.removeEventListener('copy', handler)
+    }
+    document.addEventListener('copy', handler)
+    const ok = document.execCommand('copy')
+    document.removeEventListener('copy', handler)
+    if (ok) {
+      ElMessage.success('图片已复制到剪贴板，可直接在微信粘贴')
+    } else {
+      ElMessage.warning('浏览器不支持剪贴板复制，请用下载图片功能')
+    }
   } catch (e) {
-    // fallback: 提示用户右键另存
     ElMessage.warning('浏览器不支持剪贴板复制，请用下载图片功能')
   }
 }
