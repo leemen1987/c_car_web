@@ -324,3 +324,19 @@ onMounted(async () => {
   } catch (e) {}
 })
 </script>
+
+<style scoped>
+:deep(.confirm-date-range) {
+  width: 220px !important;
+  max-width: 220px !important;
+}
+:deep(.confirm-date-range .el-range-input) {
+  font-size: 12px;
+  width: 72px !important;
+  min-width: 60px !important;
+}
+:deep(.confirm-date-range .el-range-separator) {
+  width: 20px !important;
+  padding: 0 !important;
+}
+</style>
