@@ -25,7 +25,7 @@
           <el-option label="已取消" value="cancelled" />
         </el-select>
         <el-date-picker v-model="filter.dateRange" type="daterange" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
-          start-placeholder="开始日期" end-placeholder="结束日期" clearable style="width:220px" @change="loadTasks" />
+          start-placeholder="开始日期" end-placeholder="结束日期" clearable style="--el-date-editor-daterange-width:220px;width:220px" @change="loadTasks" />
         <el-select v-model="filter.client" placeholder="用车方" clearable filterable style="width:160px" @change="loadTasks">
           <el-option v-for="c in clientOptions" :key="c" :label="c" :value="c" />
         </el-select>
@@ -84,7 +84,7 @@
         <div style="margin-bottom:8px;color:#909399;font-size:13px">选择收件人：</div>
         <el-select v-model="sendTargets" multiple filterable placeholder="选择企微用户/外部联系人" style="width:100%">
           <el-option v-for="u in wxUsers" :key="u.id" :label="u.name + ' (' + u.id + ')'" :value="u.id" />
-          <el-option v-for="c in wxContacts" :key="c.wx_userid" :label="c.name + ' (外部)'" :value="c.wx_userid" />
+          <el-option v-for="(c, ci) in wxContacts" :key="'ext_' + ci + '_' + c.wx_userid" :label="c.name + ' (外部)'" :value="'ext_' + ci + '_' + c.wx_userid" />
         </el-select>
         <div v-if="sendTargets.length" style="margin-top:8px;color:#67c23a;font-size:12px">
           已选 {{ sendTargets.length }} 位收件人
@@ -129,7 +129,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx-js-style'
 import api from '../utils/api'
 
@@ -224,7 +224,10 @@ const sendBatch = async () => {
     const res = await api.post('/confirmations/send-batch', {
       task_ids: targetTasks.value.map(t => t.id),
       columns: selectedColumns.value,
-      targets: sendTargets.value.map(id => ({ type: 'user', id }))
+      targets: sendTargets.value.map(id => {
+        if (id.startsWith('ext_')) return { type: 'external', id: id.split('_').slice(2).join('_') }
+        return { type: 'user', id }
+      })
     })
     ElMessage.success(`发送成功 ${res.data.sent} 条，失败 ${res.data.failed} 条`)
     columnDialogVisible.value = false
@@ -286,7 +289,10 @@ const sendImage = async () => {
     const upRes = await api.post('/wechat/upload-image', { image: b64 })
     await api.post('/wechat/send-image', {
       media_id: upRes.data.media_id,
-      targets: sendTargets.value.map(id => ({ type: 'user', id }))
+      targets: sendTargets.value.map(id => {
+        if (id.startsWith('ext_')) return { type: 'external', id: id.split('_').slice(2).join('_') }
+        return { type: 'user', id }
+      })
     })
     ElMessage.success('图片已发送')
     columnDialogVisible.value = false
@@ -297,8 +303,23 @@ const sendImage = async () => {
 const copySummaryLink = async () => {
   try {
     const res = await api.get('/confirmations/summary-link')
-    await navigator.clipboard.writeText(res.data.full_url)
-    ElMessage.success('链接已复制')
+    const url = res.data.full_url
+    let ok = false
+    if (navigator.clipboard && window.isSecureContext) {
+      try { await navigator.clipboard.writeText(url); ok = true } catch (e) {}
+    }
+    if (!ok) {
+      const ta = document.createElement('textarea')
+      ta.value = url
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      try { ok = document.execCommand('copy') } catch (e) { ok = false }
+      document.body.removeChild(ta)
+    }
+    if (ok) { ElMessage.success('链接已复制') }
+    else { ElMessageBox.alert(url, '请手动复制链接', { confirmButtonText: '关闭' }) }
   } catch (e) {
     ElMessage.error('复制失败')
   }
