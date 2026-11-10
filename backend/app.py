@@ -3012,17 +3012,24 @@ def send_batch_confirm():
     sender = user.wx_sender if user and user.wx_sender else ''
     summary_url = f"{app.config.get('CONFIRM_BASE_URL', '').rstrip('/')}/summary"
 
-    # 生成纯文本表格（给外部联系人）
-    col_names = [col_defs[c][0] for c in columns if c in col_defs]
-    txt_lines = [f"📋 任务通知 ({len(tasks)}条)"]
-    txt_lines.append('─' * 30)
-    txt_lines.append(' | '.join(col_names))
-    txt_lines.append('─' * 30)
+    # 生成纯文本（给外部联系人）：第一行用车方，后续行 序号_出发时间-回程时间_出发→目的_车牌/司机
+    # 按用车方分组
+    from collections import OrderedDict
+    groups = OrderedDict()
     for t in tasks:
-        vals = [col_defs[c][1](t) for c in columns if c in col_defs]
-        txt_lines.append(' | '.join(vals))
-    txt_lines.append('─' * 30)
-    txt_lines.append(f'📊 查看完整数据: {summary_url}')
+        client = t.client.name if t.client else (t.client_name or '')
+        if client not in groups:
+            groups[client] = []
+        dep = t.departure_time.strftime('%m-%d %H:%M') if t.departure_time else ''
+        ret = t.return_time.strftime('%m-%d %H:%M') if t.return_time else '待定'
+        route = f"{t.departure or ''}→{t.destination or ''}"
+        plate = ', '.join(f"{tv.vehicle.plate_number}/{tv.driver.name}" for tv in t.task_vehicles if tv.vehicle) or (f"{t.vehicle.plate_number}/{t.driver.name}" if t.vehicle else '')
+        groups[client].append(f"{dep}-{ret}_{route}_{plate}")
+    txt_lines = []
+    for client, items in groups.items():
+        txt_lines.append(client)
+        for i, item in enumerate(items, 1):
+            txt_lines.append(f"{i}_{item}")
     txt_content = '\n'.join(txt_lines)
 
     results = []
