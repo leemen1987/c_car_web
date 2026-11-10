@@ -44,7 +44,9 @@
       <el-table :data="filteredTasks" border stripe style="width:100%" max-height="500"
         :header-cell-style="{ whiteSpace: 'nowrap' }" @selection-change="onSelectionChange">
         <el-table-column type="selection" width="40" />
-        <el-table-column prop="task_no" label="编号" width="130" />
+        <el-table-column prop="departure_time" label="出车时间" width="130" />
+        <el-table-column prop="departure" label="出发地点" min-width="110" />
+        <el-table-column prop="destination" label="目的地" min-width="110" />
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.status === 'completed'" type="success" size="small">已完成</el-tag>
@@ -53,22 +55,23 @@
             <el-tag v-else type="warning" size="small">待排班</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="用车方" min-width="120">
+        <el-table-column label="用车方" min-width="100">
           <template #default="{ row }">{{ row.client_company || row.client_name }}</template>
         </el-table-column>
-        <el-table-column label="出发→目的" min-width="130">
-          <template #default="{ row }">{{ row.departure }}→{{ row.destination }}</template>
-        </el-table-column>
-        <el-table-column prop="departure_time" label="出车" width="110" />
-        <el-table-column prop="return_time" label="回程" width="110" />
-        <el-table-column label="车牌/司机" min-width="130">
+        <el-table-column label="车辆/司机" min-width="160">
           <template #default="{ row }">
             <div v-if="row.task_vehicles && row.task_vehicles.length">
               <div v-for="(tv, i) in row.task_vehicles" :key="i" style="font-size:12px">
-                {{ tv.vehicle_plate }} {{ tv.driver_name }}
+                {{ tv.vehicle_capacity ? tv.vehicle_capacity + '座' : '' }}{{ tv.vehicle_plate }}
+                <template v-if="tv.driver_name">｜司机：{{ tv.driver_name }} {{ tv.driver_phone }}</template>
+                <template v-if="row.rental_fee">（车费{{ row.rental_fee }}元）</template>
               </div>
             </div>
-            <template v-else>{{ row.vehicle_plate }} {{ row.driver_name }}</template>
+            <template v-else>
+              {{ row.vehicle_plate }}
+              <template v-if="row.driver_name">｜司机：{{ row.driver_name }}</template>
+              <template v-if="row.rental_fee">（车费{{ row.rental_fee }}元）</template>
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -143,22 +146,19 @@ const wxUsers = ref([])
 const wxContacts = ref([])
 
 const columnDefs = {
-  task_no: { label: '任务编号' },
   client_name: { label: '用车方' },
-  route: { label: '出发→目的' },
   departure_time: { label: '出车时间' },
-  return_time: { label: '回程时间' },
-  rental_days: { label: '天数' },
-  rental_fee: { label: '租车费' },
-  plate: { label: '车牌号' },
+  departure: { label: '出发地点' },
+  destination: { label: '目的地' },
+  plate: { label: '车辆安排' },
   driver: { label: '司机' },
-  company: { label: '车属公司' },
+  rental_fee: { label: '车费' },
   status: { label: '状态' },
   paid: { label: '收款' },
   remark: { label: '备注' }
 }
 const savedCols = localStorage.getItem('confirm_selected_columns')
-const selectedColumns = ref(savedCols ? JSON.parse(savedCols) : ['task_no', 'client_name', 'route', 'departure_time', 'plate', 'driver', 'status'])
+const selectedColumns = ref(savedCols ? JSON.parse(savedCols) : ['client_name', 'departure_time', 'route', 'plate', 'driver', 'status'])
 
 watch(selectedColumns, (v) => { localStorage.setItem('confirm_selected_columns', JSON.stringify(v)) }, { deep: true })
 const columnDialogVisible = ref(false)
@@ -182,15 +182,21 @@ const tasksCompleted = computed(() => tasks.value.filter(t => t.status === 'comp
 
 const getColumnValue = (task, key) => {
   const map = {
-    task_no: () => task.task_no || '',
     client_name: () => task.client_company || task.client_name || '',
-    route: () => `${task.departure || ''}→${task.destination || ''}`,
+    departure: () => task.departure || '',
+    destination: () => task.destination || '',
+    route: () => `${task.departure || ''}--${task.destination || ''}`,
     departure_time: () => task.departure_time || '',
     return_time: () => task.return_time || '',
     rental_days: () => task.rental_days || '',
-    rental_fee: () => `¥${task.rental_fee || 0}`,
-    plate: () => (task.task_vehicles || []).map(tv => tv.vehicle_plate).filter(Boolean).join(', ') || task.vehicle_plate || '',
-    driver: () => (task.task_vehicles || []).map(tv => tv.driver_name).filter(Boolean).join(', ') || task.driver_name || '',
+    rental_fee: () => task.rental_fee ? `${task.rental_fee}元` : '',
+    plate: () => (task.task_vehicles || []).map(tv => {
+      const cap = tv.vehicle_capacity ? tv.vehicle_capacity + '座车' : '车'
+      return `安排${cap}${tv.vehicle_plate}`
+    }).join('；') || (task.vehicle_plate ? `安排${task.vehicle_plate}` : ''),
+    driver: () => (task.task_vehicles || []).map(tv => {
+      return `司机：${tv.driver_name || ''} ${tv.driver_phone || ''}`.trim()
+    }).join('；') || (task.driver_name ? `司机：${task.driver_name}` : ''),
     company: () => task.vehicle_company || '',
     status: () => ({ pending: '待排班', scheduled: '已排班', completed: '已完成', cancelled: '已取消' }[task.status] || task.status),
     paid: () => task.is_paid ? '已收' : '未收',

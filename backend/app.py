@@ -3018,24 +3018,33 @@ def send_batch_confirm():
     sender = user.wx_sender if user and user.wx_sender else ''
     summary_url = f"{app.config.get('CONFIRM_BASE_URL', '').rstrip('/')}/summary"
 
-    # 生成纯文本（给外部联系人）：第一行用车方，后续行 序号_出发时间-回程时间_出发→目的_车牌/司机
-    # 按用车方分组
+    # 统一格式：月日-时分，出发--目的，安排{座位}座车{车牌}，司机：{姓名} {电话}（车费{金额}元）
     from collections import OrderedDict
     groups = OrderedDict()
     for t in tasks:
         client = t.client.name if t.client else (t.client_name or '')
         if client not in groups:
             groups[client] = []
-        dep = t.departure_time.strftime('%m-%d %H:%M') if t.departure_time else ''
-        ret = t.return_time.strftime('%m-%d %H:%M') if t.return_time else '待定'
-        route = f"{t.departure or ''}→{t.destination or ''}"
-        plate = ', '.join(f"{tv.vehicle.plate_number}/{tv.driver.name}" for tv in t.task_vehicles if tv.vehicle) or (f"{t.vehicle.plate_number}/{t.driver.name}" if t.vehicle else '')
-        groups[client].append(f"{dep}-{ret}_{route}_{plate}")
+        dep = t.departure_time.strftime('%-m月%-d日-%H:%M') if t.departure_time else ''
+        dest_parts = []
+        for tv in t.task_vehicles:
+            cap = tv.vehicle.capacity if tv.vehicle else ''
+            plate = tv.vehicle.plate_number if tv.vehicle else ''
+            drv_name = tv.driver.name if tv.driver else ''
+            drv_phone = tv.driver.phone if tv.driver else ''
+            cap_str = f"{cap}座车" if cap else "车"
+            fee = f"（车费{int(t.rental_fee) if t.rental_fee and t.rental_fee == int(t.rental_fee) else t.rental_fee}元）" if t.rental_fee else ''
+            dest_parts.append(f"安排{cap_str}{plate}，司机：{drv_name} {drv_phone}{fee}")
+        if not dest_parts:
+            fee = f"（车费{int(t.rental_fee) if t.rental_fee and t.rental_fee == int(t.rental_fee) else t.rental_fee}元）" if t.rental_fee else ''
+            dest_parts.append(f"司机：{t.driver.name if t.driver else ''} {t.driver.phone if t.driver else ''}{fee}")
+        line = f"{dep}，{t.departure or ''}--{t.destination or ''}，" + "；".join(dest_parts)
+        groups[client].append(line)
     txt_lines = []
     for client, items in groups.items():
         txt_lines.append(client)
-        for i, item in enumerate(items, 1):
-            txt_lines.append(f"{i}_{item}")
+        for item in items:
+            txt_lines.append(item)
     txt_content = '\n'.join(txt_lines)
 
     results = []
