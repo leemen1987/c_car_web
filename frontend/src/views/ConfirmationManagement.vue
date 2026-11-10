@@ -84,7 +84,7 @@
         <div style="margin-bottom:8px;color:#909399;font-size:13px">选择收件人：</div>
         <el-select v-model="sendTargets" multiple filterable placeholder="选择企微用户/外部联系人" style="width:100%">
           <el-option v-for="u in wxUsers" :key="u.id" :label="u.name + ' (' + u.id + ')'" :value="u.id" />
-          <el-option v-for="(c, ci) in wxContacts" :key="'ext_' + ci + '_' + c.wx_userid" :label="c.name + ' (外部)'" :value="'ext_' + ci + '_' + c.wx_userid" />
+          <el-option v-for="(c, ci) in wxContacts" :key="'ext_' + ci + '_' + c.external_userid" :label="c.name + ' (外部)'" :value="'ext_' + ci + '_' + c.external_userid" />
         </el-select>
         <div v-if="sendTargets.length" style="margin-top:8px;color:#67c23a;font-size:12px">
           已选 {{ sendTargets.length }} 位收件人
@@ -326,8 +326,18 @@ const sendImage = async () => {
 
 const copySummaryLink = async () => {
   try {
+    // 编码筛选条件到 hash
+    const hashParts = []
+    if (filter.value.status) hashParts.push('status=' + encodeURIComponent(filter.value.status))
+    if (filter.value.client) hashParts.push('client=' + encodeURIComponent(filter.value.client))
+    if (filter.value.company.length) hashParts.push('company=' + encodeURIComponent(filter.value.company.join(',')))
+    if (filter.value.dateRange && filter.value.dateRange.length === 2) {
+      hashParts.push('start_date=' + encodeURIComponent(filter.value.dateRange[0]))
+      hashParts.push('end_date=' + encodeURIComponent(filter.value.dateRange[1]))
+    }
+    const hash = hashParts.length ? '#' + hashParts.join('&') : ''
     const res = await api.get('/confirmations/summary-link')
-    const url = res.data.full_url
+    const url = res.data.full_url + hash
     let ok = false
     if (navigator.clipboard && window.isSecureContext) {
       try { await navigator.clipboard.writeText(url); ok = true } catch (e) {}
