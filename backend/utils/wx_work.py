@@ -79,12 +79,13 @@ class WxWorkClient:
         return self._post_request(api_url, data)
 
     def send_external_text_message(self, external_userid, sender, content):
-        """发送纯文本消息给外部联系人（微信客户）
+        """创建企业群发任务发给外部联系人（微信客户）
 
-        API文档: https://developer.work.weixin.qq.com/document/path/95818
+        注意：此API创建群发任务，需成员在企微APP确认后才真正发送！
+        API文档: https://developer.work.weixin.qq.com/document/path/92135
         """
         token = self.get_access_token()
-        api_url = f'https://qyapi.weixin.qq.com/cgi-bin/externalcontact/message/send?access_token={token}'
+        api_url = f'https://qyapi.weixin.qq.com/cgi-bin/externalcontact/add_msg_template?access_token={token}'
         data = {
             "chat_type": "single",
             "external_userid": [external_userid],
@@ -107,28 +108,31 @@ class WxWorkClient:
             return {"errcode": -1, "errmsg": str(e)}
 
     def send_external_link_message(self, external_userid, sender, title, description, url, picurl=''):
-        """发送链接消息给外部联系人（微信客户）
+        """创建企业群发任务发链接给外部联系人（需企微APP确认后发送）
 
-        API文档: https://developer.work.weixin.qq.com/document/path/95818
+        API文档: https://developer.work.weixin.qq.com/document/path/92135
         """
         token = self.get_access_token()
-        api_url = f'https://qyapi.weixin.qq.com/cgi-bin/externalcontact/message/send?access_token={token}'
+        api_url = f'https://qyapi.weixin.qq.com/cgi-bin/externalcontact/add_msg_template?access_token={token}'
 
         data = {
             "chat_type": "single",
             "external_userid": [external_userid],
             "sender": sender,
             "text": {
-                "content": f"📋 任务确认通知\n{description}\n请点击查看详情"
+                "content": f"📋 任务通知\n{description}\n请点击查看详情"
             },
-            "link": {
-                "title": title,
-                "description": description,
-                "url": url,
-            }
+            "attachments": [{
+                "msgtype": "link",
+                "link": {
+                    "title": title,
+                    "desc": description,
+                    "url": url,
+                }
+            }]
         }
         if picurl:
-            data["link"]["picurl"] = picurl
+            data["attachments"][0]["link"]["picurl"] = picurl
 
         try:
             json_data = json.dumps(data, ensure_ascii=False).encode('utf-8')

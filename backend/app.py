@@ -238,6 +238,8 @@ def update_user(user_id):
         user.role = data['role']
     if 'permissions' in data:
         user.set_permissions(data['permissions'])
+    if 'wx_sender' in data:
+        user.wx_sender = data.get('wx_sender', '').strip()
     db.session.commit()
     return jsonify({'code': 200, 'msg': '更新成功', 'data': user.to_dict()})
 

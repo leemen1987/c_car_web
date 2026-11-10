@@ -230,7 +230,7 @@ const sendBatch = async () => {
         return { type: 'user', id }
       })
     })
-    ElMessage.success(`发送成功 ${res.data.sent} 条，失败 ${res.data.failed} 条`)
+    ElMessage.success(`已创建 ${res.data.sent} 条群发任务（需在企微APP确认发送），失败 ${res.data.failed} 条`)
     columnDialogVisible.value = false
   } catch (e) {}
 }
