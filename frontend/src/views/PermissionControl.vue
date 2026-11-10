@@ -31,6 +31,9 @@
         <el-table-column label="企微UserID" width="130">
           <template #default="{ row }">{{ row.wx_sender || '未配置' }}</template>
         </el-table-column>
+        <el-table-column label="云之家ID" width="130">
+          <template #default="{ row }">{{ row.yunzhijia_openid || '未绑定' }}</template>
+        </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="170" />
         <el-table-column label="操作" width="200" align="center">
           <template #default="{ row }">
@@ -61,6 +64,9 @@
         </el-form-item>
         <el-form-item label="企微UserID">
           <el-input v-model="userForm.wx_sender" placeholder="企业微信UserID（用于发消息）" />
+        </el-form-item>
+        <el-form-item label="云之家ID">
+          <el-input v-model="userForm.yunzhijia_openid" placeholder="云之家OpenID（用于发起审批）" />
         </el-form-item>
         <el-form-item label="页面权限">
           <el-checkbox-group v-model="userForm.permissions">
@@ -94,7 +100,7 @@ const isEdit = ref(false)
 const editId = ref(null)
 const currentUserId = ref(JSON.parse(localStorage.getItem('user') || '{}').id)
 
-const userForm = ref({ username: '', password: '', role: 'user', permissions: [], wx_sender: '' })
+const userForm = ref({ username: '', password: '', role: 'user', permissions: [], wx_sender: '', yunzhijia_openid: '' })
 
 const permLabel = (p) => {
   const map = { task: '任务管理', client: '用车单位', driver: '司机管理', vehicle: '车辆管理', labor_rate: '差费标准', report: '报表管理', report_edit: '报表编辑', permission: '权限控制' }
@@ -111,14 +117,14 @@ const loadUsers = async () => {
 const showAddUser = () => {
   isEdit.value = false
   editId.value = null
-  userForm.value = { username: '', password: '', role: 'user', permissions: [], wx_sender: '' }
+  userForm.value = { username: '', password: '', role: 'user', permissions: [], wx_sender: '', yunzhijia_openid: '' }
   dialogVisible.value = true
 }
 
 const showEditUser = (row) => {
   isEdit.value = true
   editId.value = row.id
-  userForm.value = { username: row.username, password: '', role: row.role, permissions: [...row.permissions], wx_sender: row.wx_sender || '' }
+  userForm.value = { username: row.username, password: '', role: row.role, permissions: [...row.permissions], wx_sender: row.wx_sender || '', yunzhijia_openid: row.yunzhijia_openid || '' }
   dialogVisible.value = true
 }
 

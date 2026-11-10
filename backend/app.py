@@ -187,6 +187,8 @@ def update_user_settings():
         user.yunzhijia_openid = data.get('yunzhijia_openid', '').strip()
     if 'wx_sender' in data:
         user.wx_sender = data.get('wx_sender', '').strip()
+    if 'yunzhijia_openid' in data:
+        user.yunzhijia_openid = data.get('yunzhijia_openid', '').strip()
     db.session.commit()
     return jsonify({'code': 200, 'msg': '更新成功', 'data': user.to_dict()})
 
@@ -240,6 +242,8 @@ def update_user(user_id):
         user.set_permissions(data['permissions'])
     if 'wx_sender' in data:
         user.wx_sender = data.get('wx_sender', '').strip()
+    if 'yunzhijia_openid' in data:
+        user.yunzhijia_openid = data.get('yunzhijia_openid', '').strip()
     db.session.commit()
     return jsonify({'code': 200, 'msg': '更新成功', 'data': user.to_dict()})
 
@@ -2027,7 +2031,9 @@ def submit_approval():
 
         # 使用当前登录用户的 OpenID，未配置则使用默认值
         current_user = User.query.get(session['user_id'])
-        creator_openid = (current_user.yunzhijia_openid or '').strip() or app.config['YUNZHIJIA_CREATOR_OPENID']
+        creator_openid = (current_user.yunzhijia_openid or '').strip()
+        if not creator_openid:
+            return jsonify({'code': 400, 'msg': '请先在权限控制中绑定您的云之家ID'})
 
         payload = {
             'formCodeId': template_id,
