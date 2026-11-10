@@ -8,7 +8,7 @@
             <el-tag type="info">共 {{ filteredTasks.length }} 条</el-tag>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
-            <el-button type="primary" @click="openSendDialog" :disabled="!filteredTasks.length">发送表格</el-button>
+            <el-button type="primary" @click="openSendDialog" :disabled="!filteredTasks.length">企微客户</el-button>
             <el-button type="success" @click="openExportDialog" :disabled="!filteredTasks.length">导出Excel</el-button>
             <el-button type="warning" @click="openImageDialog" :disabled="!filteredTasks.length">生成图片</el-button>
             <el-button @click="copySummaryLink">复制链接</el-button>
@@ -169,7 +169,7 @@ const imageDataUrl = ref('')
 const imageResultVisible = ref(false)
 
 const columnDialogTitle = computed(() => ({
-  send: '发送表格（企微）',
+  send: '企微客户',
   export: '导出Excel',
   image: '生成表格图片'
 }[columnDialogMode.value]))
