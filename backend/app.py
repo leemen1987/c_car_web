@@ -3108,9 +3108,61 @@ def send_wechat_image():
 def get_summary_link():
     import uuid
     token = uuid.uuid4().hex[:32]
+    # 保存筛选条件到 token
+    filter_params = {
+        'status': request.args.get('status', ''),
+        'client': request.args.get('client', ''),
+        'company': request.args.get('company', ''),
+        'start_date': request.args.get('start_date', ''),
+        'end_date': request.args.get('end_date', ''),
+    }
+    SystemConfig.set(f'summary_token_{token}', json.dumps(filter_params, ensure_ascii=False))
     base = app.config.get('CONFIRM_BASE_URL', '').rstrip('/')
     url = f"/summary/{token}"
     return jsonify({'code': 200, 'data': {'url': url, 'full_url': f'{base}{url}'}})
+
+
+@app.route('/api/summary/<token>', methods=['GET'])
+def get_summary_by_token(token):
+    """公开接口：按token返回任务汇总数据（无需登录）"""
+    cfg = SystemConfig.get(f'summary_token_{token}')
+    if not cfg:
+        return jsonify({'code': 404, 'msg': '链接无效或已过期'}), 404
+    try:
+        params = json.loads(cfg)
+    except (json.JSONDecodeError, ValueError):
+        params = {}
+
+    query = Task.query.options(
+        selectinload(Task.task_vehicles).selectinload(TaskVehicle.vehicle),
+        selectinload(Task.task_vehicles).selectinload(TaskVehicle.driver),
+        selectinload(Task.vehicle),
+        selectinload(Task.driver),
+        selectinload(Task.client),
+        selectinload(Task.contact),
+    )
+    status = params.get('status', '')
+    if status and status != 'all':
+        query = query.filter(Task.status == status)
+    client = params.get('client', '')
+    if client:
+        query = query.filter(db.or_(
+            Task.client_name.like(f'%{client}%'),
+            Task.client.has(Client.name.like(f'%{client}%'))
+        ))
+    company = params.get('company', '')
+    if company:
+        companies = [c for c in company.split(',') if c]
+        query = query.join(Vehicle, Task.vehicle_id == Vehicle.id).filter(Vehicle.company.in_(companies))
+    start_date = params.get('start_date', '')
+    if start_date:
+        query = query.filter(Task.departure_time >= start_date)
+    end_date = params.get('end_date', '')
+    if end_date:
+        query = query.filter(Task.departure_time <= end_date + ' 23:59:59')
+
+    tasks = query.order_by(Task.departure_time.desc(), Task.created_at.desc()).limit(1000).all()
+    return jsonify({'code': 200, 'data': [t.to_dict() for t in tasks]})
 
 
 @app.route('/api/confirmations', methods=['GET'])

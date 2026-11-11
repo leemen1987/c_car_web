@@ -343,9 +343,9 @@ const copySummaryLink = async () => {
       hashParts.push('start_date=' + encodeURIComponent(filter.value.dateRange[0]))
       hashParts.push('end_date=' + encodeURIComponent(filter.value.dateRange[1]))
     }
-    const hash = hashParts.length ? '#' + hashParts.join('&') : ''
-    const res = await api.get('/confirmations/summary-link')
-    const url = res.data.full_url + hash
+    const queryParams = hashParts.join('&')
+    const res = await api.get('/confirmations/summary-link' + (queryParams ? '?' + queryParams : ''))
+    const url = res.data.full_url
     let ok = false
     if (navigator.clipboard && window.isSecureContext) {
       try { await navigator.clipboard.writeText(url); ok = true } catch (e) {}

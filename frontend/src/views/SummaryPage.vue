@@ -63,17 +63,11 @@ const groupedTasks = computed(() => {
 
 onMounted(async () => {
   try {
-    const hash = route.hash.replace('#', '')
-    const params = {}
-    if (hash) {
-      for (const kv of hash.split('&')) {
-        const [k, v] = kv.split('=')
-        if (k && v) params[decodeURIComponent(k)] = decodeURIComponent(v)
-      }
-    }
-    if (!params.status) params.status = 'scheduled'
-    const res = await api.get('/tasks/filtered', { params })
-    tasks.value = res.data
-  } catch (e) {}
+    const token = route.params.token || ''
+    const res = await api.get(`/summary/${token}`)
+    tasks.value = res.data || []
+  } catch (e) {
+    // token 无效或过期
+  }
 })
 </script>
