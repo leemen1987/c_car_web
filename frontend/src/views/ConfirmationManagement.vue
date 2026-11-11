@@ -11,6 +11,7 @@
             <el-button type="primary" @click="openSendDialog" :disabled="!filteredTasks.length">企微客户</el-button>
             <el-button type="success" @click="openExportDialog" :disabled="!filteredTasks.length">导出Excel</el-button>
             <el-button type="warning" @click="openImageDialog" :disabled="!filteredTasks.length">生成图片</el-button>
+            <el-button @click="copyTasks">复制任务</el-button>
             <el-button @click="copySummaryLink">复制链接</el-button>
           </div>
         </div>
@@ -159,7 +160,8 @@ const columnDefs = {
 }
 const savedCols = localStorage.getItem('confirm_selected_columns')
 const defaultCols = ['client_name', 'departure_time', 'route', 'plate', 'driver', 'status']
-const selectedColumns = ref(savedCols ? JSON.parse(savedCols).filter(k => k && k !== 'task_no') : defaultCols)
+const validKeys = ['client_name', 'departure_time', 'departure', 'destination', 'route', 'plate', 'driver', 'rental_fee', 'status', 'paid', 'remark', 'return_time', 'rental_days', 'company']
+const selectedColumns = ref(savedCols ? JSON.parse(savedCols).filter(k => k && validKeys.includes(k)) : defaultCols)
 if (!selectedColumns.value.length) selectedColumns.value = defaultCols
 
 watch(selectedColumns, (v) => { localStorage.setItem('confirm_selected_columns', JSON.stringify(v)) }, { deep: true })
@@ -244,7 +246,7 @@ const sendBatch = async () => {
 }
 
 const exportExcel = () => {
-  const header = selectedColumns.value.map(k => columnDefs[k].label)
+  const header = selectedColumns.value.map(k => columnDefs[k]?.label || k)
   const rows = targetTasks.value.map(t => selectedColumns.value.map(k => getColumnValue(t, k)))
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
   ws['!cols'] = header.map(() => ({ wch: 15 }))
@@ -330,6 +332,52 @@ const sendImage = async () => {
     columnDialogVisible.value = false
     imageResultVisible.value = false
   } catch (e) {}
+}
+
+const copyTasks = async () => {
+  const groups = {}
+  for (const t of targetTasks.value) {
+    const client = t.client_company || t.client_name || ''
+    if (!groups[client]) groups[client] = []
+    const dt = t.departure_time || ''
+    const dep = dt ? `${parseInt(dt.slice(5, 7))}月${parseInt(dt.slice(8, 10))}日-${dt.slice(11, 16)}` : ''
+    const route = `${t.departure || ''}--${t.destination || ''}`
+    const vehicles = (t.task_vehicles || []).map(tv => {
+      const capRaw = tv.vehicle_capacity || ''
+      const cap = capRaw ? (capRaw.includes('座') ? capRaw + '车' : capRaw + '座车') : '车'
+      const drv = tv.driver_name ? `司机：${tv.driver_name} ${tv.driver_phone || ''}` : ''
+      const fee = t.rental_fee ? `（车费${t.rental_fee}元）` : ''
+      return `安排${cap}${tv.vehicle_plate || ''}，${drv}${fee}`
+    })
+    if (!vehicles.length) {
+      const drv = t.driver_name ? `司机：${t.driver_name}` : ''
+      const fee = t.rental_fee ? `（车费${t.rental_fee}元）` : ''
+      vehicles.push(`${drv}${fee}`)
+    }
+    groups[client].push(`${dep}，${route}，${vehicles.join('；')}`)
+  }
+  const lines = []
+  for (const [client, items] of Object.entries(groups)) {
+    lines.push(client)
+    items.forEach(l => lines.push(l))
+  }
+  const text = lines.join('\n')
+  let ok = false
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); ok = true } catch (e) {}
+  }
+  if (!ok) {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    try { ok = document.execCommand('copy') } catch (e) { ok = false }
+    document.body.removeChild(ta)
+  }
+  if (ok) ElMessage.success('任务信息已复制到剪贴板')
+  else ElMessage.warning('复制失败，请手动复制')
 }
 
 const copySummaryLink = async () => {
