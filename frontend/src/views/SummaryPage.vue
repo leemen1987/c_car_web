@@ -32,10 +32,12 @@ const route = useRoute()
 const tasks = ref([])
 
 const formatTaskLine = (task) => {
-  const dep = task.departure_time ? task.departure_time.slice(5).replace('-', '月') + '日-' + task.departure_time.slice(11) : ''
+  const dt = task.departure_time || ''
+  const dep = dt ? `${parseInt(dt.slice(5, 7))}月${parseInt(dt.slice(8, 10))}日-${dt.slice(11, 16)}` : ''
   const route = `${task.departure || ''}--${task.destination || ''}`
   const vehicles = (task.task_vehicles || []).map(tv => {
-    const cap = tv.vehicle_capacity ? `${tv.vehicle_capacity}座车` : '车'
+    const capRaw = tv.vehicle_capacity || ''
+    const cap = capRaw ? (capRaw.includes('座') ? capRaw + '车' : capRaw + '座车') : '车'
     const plate = tv.vehicle_plate || ''
     const drv = tv.driver_name ? `司机：${tv.driver_name} ${tv.driver_phone || ''}` : ''
     const fee = task.rental_fee ? `（车费${task.rental_fee}元）` : ''
