@@ -1744,6 +1744,7 @@ def complete_task(task_id):
     task.actual_bridge_fee = data.get('actual_bridge_fee', 0)
     task.actual_labor_fee = data.get('actual_labor_fee', 0)
     task.other_fee = data.get('other_fee', 0)
+    task.parking_fee = data.get('parking_fee', 0)
     task.remark = data.get('remark', '')
     task.is_paid = data.get('is_paid', False)
     paid_date = data.get('paid_date')
@@ -1767,13 +1768,15 @@ def complete_task(task_id):
     # 计算成本和利润
     if task.external_vehicle:
         # 全部外部车辆：自驾车按¥50/天提成，其余按10%提成
-        task.actual_fuel_fee = 0
-        task.actual_bridge_fee = 0
-        task.actual_labor_fee = 0
         if task.self_drive:
+            # 自驾车：可录油费/桥路费/停车费
+            task.actual_labor_fee = 0
             _commission = 50 * (task.rental_days or 1)
-            task.final_profit = round(_commission - (task.other_fee or 0), 2)
+            task.final_profit = round(_commission - (task.actual_fuel_fee or 0) - (task.actual_bridge_fee or 0) - (task.parking_fee or 0) - (task.other_fee or 0), 2)
         else:
+            task.actual_fuel_fee = 0
+            task.actual_bridge_fee = 0
+            task.actual_labor_fee = 0
             task.final_profit = round((task.rental_fee or 0) * 0.1 - (task.other_fee or 0), 2)
         task.actual_cost = round((task.rental_fee or 0) - task.final_profit, 2)
     else:
@@ -3536,6 +3539,12 @@ def init_db():
     except Exception:
         app.logger.debug("ALTER TABLE tasks.yzj_approval_status skipped (already exists)")
         db.session.rollback()
+    try:
+        db.session.execute(db.text("ALTER TABLE tasks ADD COLUMN parking_fee FLOAT DEFAULT 0"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        app.logger.debug("ALTER TABLE tasks.parking_fee skipped (already exists)")
 
     # 给 tasks 表增加审批实例相关字段
     for col, typedef in [

@@ -524,6 +524,13 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="isMobile ? 0 : 20">
+          <el-col :span="isMobile ? 24 : 12">
+            <el-form-item label="起始里程(km)">
+              <el-input-number v-model="taskForm.start_mileage" :min="0" :precision="0" style="width:100%" placeholder="选填" />
+            </el-form-item>
+          </el-col>
+        </el-row>
         </template>
         <template v-if="!taskForm.self_drive && !taskForm.external_vehicle">
         <el-row :gutter="isMobile ? 0 : 20">
@@ -684,6 +691,15 @@
         <el-form-item v-else label="租车费(元)">
           <span style="color:#409eff;font-weight:600">¥{{ mileageRentalFee.toFixed(2) }}</span>
           <span style="color:#909399;font-size:12px;margin-left:8px">（里程 × 费率{{ mileageRateForTask ? mileageRateForTask + '元/km' : '' }}）</span>
+        </el-form-item>
+        <el-form-item label="油费(元)">
+          <el-input-number v-model="completeForm.actual_fuel_fee" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="桥路费(元)">
+          <el-input-number v-model="completeForm.actual_bridge_fee" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="停车费(元)">
+          <el-input-number v-model="completeForm.parking_fee" :min="0" :precision="2" style="width:100%" />
         </el-form-item>
         </template>
         <template v-if="isExternalComplete">
@@ -1375,7 +1391,7 @@ const onScheduleVehicleChange = (idx, val) => {
   // 选择车辆时自动带出里程数（用于自驾车显示）
 }
 
-const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
+const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, parking_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
 const completeTaskId = ref(null)
 const currentCompleteTask = ref(null)
 
@@ -1663,7 +1679,7 @@ const submitImport = async () => {
 const showAddDialog = () => {
   isEdit.value = false
   editId.value = null
-  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1, external: false, rental_fee: 0, labor_fee: 0 }], self_drive: false, external_vehicle: false, rental_bill_mode: 'fixed', rental_daily_rate: 0, mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
+  taskForm.value = { client_type: 'personal', client_name: '', client_phone: '', client_id: null, contact_id: null, departure: '', destination: '', departure_time: '', return_time: '', vehicle_type: '', vehicle_count: 1, capacityPlan: [{ vehicle_type: '', count: 1, external: false, rental_fee: 0, labor_fee: 0 }], self_drive: false, external_vehicle: false, rental_bill_mode: 'fixed', rental_daily_rate: 0, mileage: 0, start_mileage: 0, rental_fee: 0, fuel_fee: 0, bridge_fee: 0, labor_rate_id: null, labor_fee: 0, remark: '' }
   taskDialogVisible.value = true
 }
 
@@ -1882,6 +1898,7 @@ const showCompleteDialog = (row) => {
     actual_bridge_fee: row.bridge_fee || 0,
     actual_labor_fee: 0,
     other_fee: 0,
+    parking_fee: 0,
     remark: '',
     is_paid: false,
     paid_date: '',

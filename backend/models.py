@@ -207,6 +207,7 @@ class Task(db.Model):
     actual_bridge_fee = db.Column(db.Float, default=0)  # 实际桥路费
     actual_labor_fee = db.Column(db.Float, default=0)  # 实际司机人工费
     other_fee = db.Column(db.Float, default=0)  # 其他费用
+    parking_fee = db.Column(db.Float, default=0)  # 停车费
     actual_cost = db.Column(db.Float, default=0)  # 实际成本
     final_profit = db.Column(db.Float, default=0)  # 最终利润
     remark = db.Column(db.Text, default='')  # 备注
@@ -315,6 +316,7 @@ class Task(db.Model):
             'actual_bridge_fee': self.actual_bridge_fee,
             'actual_labor_fee': self.actual_labor_fee,
             'other_fee': self.other_fee,
+            'parking_fee': self.parking_fee or 0,
             'actual_cost': self.actual_cost,
             'final_profit': self.final_profit,
             'remark': self.remark or '',
