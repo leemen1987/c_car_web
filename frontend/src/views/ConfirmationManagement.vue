@@ -98,7 +98,7 @@
           <table style="width:100%;border-collapse:collapse;font-size:12px">
             <thead>
               <tr style="background:#f5f7fa">
-                <th v-for="key in selectedColumns" :key="key" style="border:1px solid #dcdfe6;padding:6px 8px;text-align:left">{{ columnDefs[key].label }}</th>
+                <th v-for="key in selectedColumns" :key="key" style="border:1px solid #dcdfe6;padding:6px 8px;text-align:left">{{ columnDefs[key]?.label }}</th>
               </tr>
             </thead>
             <tbody>
@@ -158,7 +158,9 @@ const columnDefs = {
   remark: { label: '备注' }
 }
 const savedCols = localStorage.getItem('confirm_selected_columns')
-const selectedColumns = ref(savedCols ? JSON.parse(savedCols) : ['client_name', 'departure_time', 'route', 'plate', 'driver', 'status'])
+const defaultCols = ['client_name', 'departure_time', 'route', 'plate', 'driver', 'status']
+const selectedColumns = ref(savedCols ? JSON.parse(savedCols).filter(k => k && k !== 'task_no') : defaultCols)
+if (!selectedColumns.value.length) selectedColumns.value = defaultCols
 
 watch(selectedColumns, (v) => { localStorage.setItem('confirm_selected_columns', JSON.stringify(v)) }, { deep: true })
 const columnDialogVisible = ref(false)
