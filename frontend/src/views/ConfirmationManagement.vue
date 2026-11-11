@@ -45,6 +45,9 @@
       <el-table :data="filteredTasks" border stripe style="width:100%" max-height="500"
         :header-cell-style="{ whiteSpace: 'nowrap' }" @selection-change="onSelectionChange">
         <el-table-column type="selection" width="40" />
+        <el-table-column label="用车方" min-width="100">
+          <template #default="{ row }">{{ row.client_company || row.client_name }}</template>
+        </el-table-column>
         <el-table-column prop="departure_time" label="出车时间" width="130" />
         <el-table-column prop="departure" label="出发地点" min-width="110" />
         <el-table-column prop="destination" label="目的地" min-width="110" />
@@ -56,14 +59,11 @@
             <el-tag v-else type="warning" size="small">待排班</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="用车方" min-width="100">
-          <template #default="{ row }">{{ row.client_company || row.client_name }}</template>
-        </el-table-column>
         <el-table-column label="车辆/司机" min-width="160">
           <template #default="{ row }">
             <div v-if="row.task_vehicles && row.task_vehicles.length">
               <div v-for="(tv, i) in row.task_vehicles" :key="i" style="font-size:12px">
-                {{ tv.vehicle_capacity ? tv.vehicle_capacity + '座' : '' }}{{ tv.vehicle_plate }}
+                {{ tv.vehicle_capacity ? (tv.vehicle_capacity.includes('座') ? tv.vehicle_capacity : tv.vehicle_capacity + '座') : '' }}{{ tv.vehicle_plate }}
                 <template v-if="tv.driver_name">｜司机：{{ tv.driver_name }} {{ tv.driver_phone }}</template>
                 <template v-if="row.rental_fee">（车费{{ row.rental_fee }}元）</template>
               </div>
