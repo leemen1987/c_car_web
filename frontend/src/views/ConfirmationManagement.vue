@@ -78,45 +78,19 @@
       </el-table>
     </el-card>
 
-    <!-- 发送/导出/图片弹窗（共用列勾选） -->
-    <el-dialog v-model="columnDialogVisible" :title="columnDialogTitle" width="600px">
-      <div style="margin-bottom:12px;color:#909399;font-size:13px">勾选要显示的列：</div>
-      <el-checkbox-group v-model="selectedColumns">
-        <el-checkbox v-for="(def, key) in columnDefs" :key="key" :label="key" style="width:120px;margin-bottom:8px">{{ def.label }}</el-checkbox>
-      </el-checkbox-group>
-      <div v-if="columnDialogMode === 'send'" style="margin-top:16px">
-        <div style="margin-bottom:8px;color:#909399;font-size:13px">选择收件人：</div>
-        <el-select v-model="sendTargets" multiple filterable placeholder="选择企微用户/外部联系人" style="width:100%">
-          <el-option v-for="u in wxUsers" :key="u.id" :label="u.name + ' (' + u.id + ')'" :value="u.id" />
-          <el-option v-for="(c, ci) in wxContacts" :key="'ext_' + ci + '_' + c.external_userid" :label="c.name + ' (外部)'" :value="'ext_' + ci + '_' + c.external_userid" />
-        </el-select>
-        <div v-if="sendTargets.length" style="margin-top:8px;color:#67c23a;font-size:12px">
-          已选 {{ sendTargets.length }} 位收件人
-        </div>
-      </div>
-      <div v-if="columnDialogMode === 'image'" style="margin-top:12px">
-        <div ref="imagePreview" style="border:1px solid #e2e8f0;border-radius:6px;padding:12px;background:#fff;max-height:300px;overflow:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead>
-              <tr style="background:#f5f7fa">
-                <th v-for="key in selectedColumns" :key="key" style="border:1px solid #dcdfe6;padding:6px 8px;text-align:left">{{ columnDefs[key]?.label }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(task, idx) in targetTasks" :key="idx">
-                <td v-for="key in selectedColumns" :key="key" style="border:1px solid #dcdfe6;padding:5px 8px">{{ getColumnValue(task, key) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+    <!-- 企微发送弹窗（选收件人） -->
+    <el-dialog v-model="sendDialogVisible" title="企微客户" width="500px">
+      <div style="margin-bottom:8px;color:#909399;font-size:13px">选择收件人：</div>
+      <el-select v-model="sendTargets" multiple filterable placeholder="选择企微用户/外部联系人" style="width:100%">
+        <el-option v-for="u in wxUsers" :key="u.id" :label="u.name + ' (' + u.id + ')'" :value="u.id" />
+        <el-option v-for="(c, ci) in wxContacts" :key="'ext_' + ci + '_' + c.external_userid" :label="c.name + ' (外部)'" :value="'ext_' + ci + '_' + c.external_userid" />
+      </el-select>
+      <div v-if="sendTargets.length" style="margin-top:8px;color:#67c23a;font-size:12px">
+        已选 {{ sendTargets.length }} 位收件人
       </div>
       <template #footer>
-        <el-button @click="columnDialogVisible = false">取消</el-button>
-        <el-button v-if="columnDialogMode === 'send'" type="primary" @click="sendBatch" :disabled="!sendTargets.length || !selectedColumns.length">发送</el-button>
-        <el-button v-if="columnDialogMode === 'export'" type="success" @click="exportExcel">下载Excel</el-button>
-        <el-button v-if="columnDialogMode === 'image'" type="warning" @click="previewImage">预览图片</el-button>
-        <el-button v-if="columnDialogMode === 'image'" @click="downloadImage">下载图片</el-button>
-        <el-button v-if="columnDialogMode === 'image' && sendTargets.length" type="primary" @click="sendImage">发企微</el-button>
+        <el-button @click="sendDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="sendBatch" :disabled="!sendTargets.length">发送</el-button>
       </template>
     </el-dialog>
 
@@ -146,68 +120,18 @@ const companyOptions = ref([])
 const wxUsers = ref([])
 const wxContacts = ref([])
 
-const columnDefs = {
-  client_name: { label: '用车方' },
-  departure_time: { label: '出车时间' },
-  departure: { label: '出发地点' },
-  destination: { label: '目的地' },
-  plate: { label: '车辆安排' },
-  driver: { label: '司机' },
-  rental_fee: { label: '车费' },
-  status: { label: '状态' },
-  paid: { label: '收款' },
-  remark: { label: '备注' }
-}
-const savedCols = localStorage.getItem('confirm_selected_columns')
-const defaultCols = ['client_name', 'departure_time', 'route', 'plate', 'driver', 'status']
-const validKeys = ['client_name', 'departure_time', 'departure', 'destination', 'route', 'plate', 'driver', 'rental_fee', 'status', 'paid', 'remark', 'return_time', 'rental_days', 'company']
-const selectedColumns = ref(savedCols ? JSON.parse(savedCols).filter(k => k && validKeys.includes(k)) : defaultCols)
-if (!selectedColumns.value.length) selectedColumns.value = defaultCols
 
-watch(selectedColumns, (v) => { localStorage.setItem('confirm_selected_columns', JSON.stringify(v)) }, { deep: true })
-const columnDialogVisible = ref(false)
-const columnDialogMode = ref('send') // send | export | image
+const sendDialogVisible = ref(false)
 const sendTargets = ref([])
 const imagePreview = ref(null)
 const imageDataUrl = ref('')
 const imageResultVisible = ref(false)
-
-const columnDialogTitle = computed(() => ({
-  send: '企微客户',
-  export: '导出Excel',
-  image: '生成表格图片'
-}[columnDialogMode.value]))
 
 const filteredTasks = computed(() => tasks.value)
 const targetTasks = computed(() => selectedRows.value.length ? selectedRows.value : filteredTasks.value)
 const tasksPending = computed(() => tasks.value.filter(t => t.status === 'pending').length)
 const tasksScheduled = computed(() => tasks.value.filter(t => t.status === 'scheduled').length)
 const tasksCompleted = computed(() => tasks.value.filter(t => t.status === 'completed').length)
-
-const getColumnValue = (task, key) => {
-  const map = {
-    client_name: () => task.client_company || task.client_name || '',
-    departure: () => task.departure || '',
-    destination: () => task.destination || '',
-    route: () => `${task.departure || ''}--${task.destination || ''}`,
-    departure_time: () => task.departure_time || '',
-    return_time: () => task.return_time || '',
-    rental_days: () => task.rental_days || '',
-    rental_fee: () => task.rental_fee ? `${task.rental_fee}元` : '',
-    plate: () => (task.task_vehicles || []).map(tv => {
-      const cap = tv.vehicle_capacity ? tv.vehicle_capacity + '座车' : '车'
-      return `安排${cap}${tv.vehicle_plate}`
-    }).join('；') || (task.vehicle_plate ? `安排${task.vehicle_plate}` : ''),
-    driver: () => (task.task_vehicles || []).map(tv => {
-      return `司机：${tv.driver_name || ''} ${tv.driver_phone || ''}`.trim()
-    }).join('；') || (task.driver_name ? `司机：${task.driver_name}` : ''),
-    company: () => task.vehicle_company || '',
-    status: () => ({ pending: '待排班', scheduled: '已排班', completed: '已完成', cancelled: '已取消' }[task.status] || task.status),
-    paid: () => task.is_paid ? '已收' : '未收',
-    remark: () => task.remark || ''
-  }
-  return (map[key] || (() => ''))()
-}
 
 const onSelectionChange = (rows) => { selectedRows.value = rows }
 
@@ -226,28 +150,50 @@ const loadTasks = async () => {
   } catch (e) {}
 }
 
-const openSendDialog = () => { columnDialogMode.value = 'send'; columnDialogVisible.value = true }
-const openExportDialog = () => { columnDialogMode.value = 'export'; columnDialogVisible.value = true }
-const openImageDialog = () => { columnDialogMode.value = 'image'; columnDialogVisible.value = true }
+const openSendDialog = () => { sendDialogVisible.value = true }
+const openExportDialog = () => { exportExcel() }
+const openImageDialog = async () => {
+  imageDataUrl.value = await generateImage()
+  if (!imageDataUrl.value) { ElMessage.error('图片生成失败'); return }
+  imageResultVisible.value = true
+}
 
 const sendBatch = async () => {
   try {
     const res = await api.post('/confirmations/send-batch', {
       task_ids: targetTasks.value.map(t => t.id),
-      columns: selectedColumns.value,
+      columns: [],
       targets: sendTargets.value.map(id => {
         if (id.startsWith('ext_')) return { type: 'external', id: id.split('_').slice(2).join('_') }
         return { type: 'user', id }
       })
     })
     ElMessage.success(`已创建 ${res.data.sent} 条群发任务（需在企微APP确认发送），失败 ${res.data.failed} 条`)
-    columnDialogVisible.value = false
+    sendDialogVisible.value = false
   } catch (e) {}
 }
 
 const exportExcel = () => {
-  const header = selectedColumns.value.map(k => columnDefs[k]?.label || k)
-  const rows = targetTasks.value.map(t => selectedColumns.value.map(k => getColumnValue(t, k)))
+  const formatLine = (task) => {
+    const dt = task.departure_time || ''
+    const dep = dt ? `${parseInt(dt.slice(5, 7))}月${parseInt(dt.slice(8, 10))}日-${dt.slice(11, 16)}` : ''
+    const route = `${task.departure || ''}--${task.destination || ''}`
+    const vehicles = (task.task_vehicles || []).map(tv => {
+      const capRaw = tv.vehicle_capacity || ''
+      const cap = capRaw ? (capRaw.includes('座') ? capRaw + '车' : capRaw + '座车') : '车'
+      const drv = tv.driver_name ? `司机：${tv.driver_name} ${tv.driver_phone || ''}` : ''
+      const fee = task.rental_fee ? `（车费${task.rental_fee}元）` : ''
+      return `安排${cap}${tv.vehicle_plate || ''}，${drv}${fee}`
+    })
+    if (!vehicles.length) {
+      const drv = task.driver_name ? `司机：${task.driver_name}` : ''
+      const fee = task.rental_fee ? `（车费${task.rental_fee}元）` : ''
+      vehicles.push(`${drv}${fee}`)
+    }
+    return `${dep}，${route}，${vehicles.join('；')}`
+  }
+  const header = ['用车方', '内容']
+  const rows = targetTasks.value.map(t => [t.client_company || t.client_name || '', formatLine(t)])
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
   ws['!cols'] = header.map(() => ({ wch: 15 }))
   // 样式
@@ -263,30 +209,54 @@ const exportExcel = () => {
   XLSX.utils.book_append_sheet(wb, ws, '任务通知')
   XLSX.writeFile(wb, getExportFileName('xlsx'))
   ElMessage.success('Excel已下载')
-  columnDialogVisible.value = false
-}
+  }
 
 const generateImage = () => {
   return new Promise((resolve) => {
-    const el = imagePreview.value
-    if (!el) { resolve(''); return }
-    // 临时展开表格，避免截断
-    const origStyle = el.style.cssText
-    el.style.maxHeight = 'none'
-    el.style.overflow = 'visible'
+    // 创建隐藏 div 渲染统一格式
+    const div = document.createElement('div')
+    div.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;padding:20px;font-size:13px;line-height:24px;font-family:Microsoft YaHei,sans-serif;max-width:600px'
+    const groups = {}
+    for (const t of targetTasks.value) {
+      const client = t.client_company || t.client_name || ''
+      if (!groups[client]) groups[client] = []
+      const dt = t.departure_time || ''
+      const dep = dt ? `${parseInt(dt.slice(5, 7))}月${parseInt(dt.slice(8, 10))}日-${dt.slice(11, 16)}` : ''
+      const route = `${t.departure || ''}--${t.destination || ''}`
+      const vehicles = (t.task_vehicles || []).map(tv => {
+        const capRaw = tv.vehicle_capacity || ''
+        const cap = capRaw ? (capRaw.includes('座') ? capRaw + '车' : capRaw + '座车') : '车'
+        const drv = tv.driver_name ? `司机：${tv.driver_name} ${tv.driver_phone || ''}` : ''
+        const fee = t.rental_fee ? `（车费${t.rental_fee}元）` : ''
+        return `安排${cap}${tv.vehicle_plate || ''}，${drv}${fee}`
+      })
+      if (!vehicles.length) {
+        const drv = t.driver_name ? `司机：${t.driver_name}` : ''
+        const fee = t.rental_fee ? `（车费${t.rental_fee}元）` : ''
+        vehicles.push(`${drv}${fee}`)
+      }
+      groups[client].push(`${dep}，${route}，${vehicles.join('；')}`)
+    }
+    for (const [client, items] of Object.entries(groups)) {
+      const h = document.createElement('div')
+      h.style.cssText = 'font-weight:600;font-size:15px;margin:10px 0 4px'
+      h.textContent = client
+      div.appendChild(h)
+      for (const item of items) {
+        const d = document.createElement('div')
+        d.style.cssText = 'padding:3px 0;border-bottom:1px solid #f0f0f0'
+        d.textContent = item
+        div.appendChild(d)
+      }
+    }
+    document.body.appendChild(div)
     import('html2canvas').then(({ default: html2canvas }) => {
-      html2canvas(el, { scale: 2, backgroundColor: '#fff', height: el.scrollHeight, windowHeight: el.scrollHeight }).then(canvas => {
-        el.style.cssText = origStyle
+      html2canvas(div, { scale: 2, backgroundColor: '#fff' }).then(canvas => {
+        document.body.removeChild(div)
         resolve(canvas.toDataURL('image/png'))
-      }).catch(() => { el.style.cssText = origStyle; resolve('') })
-    }).catch(() => { el.style.cssText = origStyle; resolve('') })
+      }).catch(() => { document.body.removeChild(div); resolve('') })
+    }).catch(() => { document.body.removeChild(div); resolve('') })
   })
-}
-
-const previewImage = async () => {
-  imageDataUrl.value = await generateImage()
-  if (!imageDataUrl.value) { ElMessage.error('图片生成失败（需安装html2canvas）'); return }
-  imageResultVisible.value = true
 }
 
 const downloadImage = async () => {
@@ -329,7 +299,7 @@ const sendImage = async () => {
       })
     })
     ElMessage.success('图片已发送')
-    columnDialogVisible.value = false
+    sendDialogVisible.value = false
     imageResultVisible.value = false
   } catch (e) {}
 }
