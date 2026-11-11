@@ -1769,10 +1769,10 @@ def complete_task(task_id):
     if task.external_vehicle:
         # 全部外部车辆：自驾车按¥50/天提成，其余按10%提成
         if task.self_drive:
-            # 自驾车：可录油费/桥路费/停车费
+            # 自驾车：油费/桥路费/停车费收客户（代收代付），不扣利润
             task.actual_labor_fee = 0
             _commission = 50 * (task.rental_days or 1)
-            task.final_profit = round(_commission - (task.actual_fuel_fee or 0) - (task.actual_bridge_fee or 0) - (task.parking_fee or 0) - (task.other_fee or 0), 2)
+            task.final_profit = round(_commission - (task.other_fee or 0), 2)
         else:
             task.actual_fuel_fee = 0
             task.actual_bridge_fee = 0
