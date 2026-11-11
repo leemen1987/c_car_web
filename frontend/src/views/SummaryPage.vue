@@ -7,37 +7,14 @@
           <span style="color:#909399;font-size:13px">共 {{ tasks.length }} 条</span>
         </div>
       </template>
-      <el-table v-if="tasks.length" :data="tasks" border stripe style="width:100%" :header-cell-style="{ whiteSpace: 'nowrap' }">
-        <el-table-column prop="task_no" label="编号" width="130" />
-        <el-table-column label="用车方" min-width="110">
-          <template #default="{ row }">{{ row.client_company || row.client_name }}</template>
-        </el-table-column>
-        <el-table-column label="出发→目的" min-width="120">
-          <template #default="{ row }">{{ row.departure }}→{{ row.destination }}</template>
-        </el-table-column>
-        <el-table-column prop="departure_time" label="出车" width="110" />
-        <el-table-column prop="return_time" label="回程" width="110" />
-        <el-table-column prop="rental_days" label="天数" width="60" align="center" />
-        <el-table-column prop="rental_fee" label="租车费" width="90" align="right" />
-        <el-table-column label="车牌/司机" min-width="120">
-          <template #default="{ row }">
-            <div v-if="row.task_vehicles && row.task_vehicles.length">
-              <div v-for="(tv, i) in row.task_vehicles" :key="i" style="font-size:12px">
-                {{ tv.vehicle_plate }} {{ tv.driver_name }}
-              </div>
-            </div>
-            <template v-else>{{ row.vehicle_plate }} {{ row.driver_name }}</template>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.status === 'completed'" type="success" size="small">已完成</el-tag>
-            <el-tag v-else-if="row.status === 'scheduled'" type="primary" size="small">已排班</el-tag>
-            <el-tag v-else-if="row.status === 'cancelled'" type="info" size="small">已取消</el-tag>
-            <el-tag v-else type="warning" size="small">待排班</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div v-if="groupedTasks.length">
+        <div v-for="(group, gi) in groupedTasks" :key="gi" style="margin-bottom:16px">
+          <div style="font-weight:600;font-size:15px;margin-bottom:6px;color:#303133">{{ group.client }}</div>
+          <div v-for="(item, ii) in group.items" :key="ii" style="font-size:13px;line-height:22px;padding:4px 8px;border-bottom:1px solid #f0f0f0">
+            {{ item }}
+          </div>
+        </div>
+      </div>
       <el-empty v-else description="暂无任务数据" />
     </el-card>
     <div style="text-align:center;margin-top:12px;color:#909399;font-size:12px">
@@ -47,16 +24,43 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../utils/api'
 
 const route = useRoute()
 const tasks = ref([])
 
+const formatTaskLine = (task) => {
+  const dep = task.departure_time ? task.departure_time.slice(5).replace('-', '月') + '日-' + task.departure_time.slice(11) : ''
+  const route = `${task.departure || ''}--${task.destination || ''}`
+  const vehicles = (task.task_vehicles || []).map(tv => {
+    const cap = tv.vehicle_capacity ? `${tv.vehicle_capacity}座车` : '车'
+    const plate = tv.vehicle_plate || ''
+    const drv = tv.driver_name ? `司机：${tv.driver_name} ${tv.driver_phone || ''}` : ''
+    const fee = task.rental_fee ? `（车费${task.rental_fee}元）` : ''
+    return `安排${cap}${plate}，${drv}${fee}`
+  })
+  if (!vehicles.length) {
+    const drv = task.driver_name ? `司机：${task.driver_name}` : ''
+    const fee = task.rental_fee ? `（车费${task.rental_fee}元）` : ''
+    vehicles.push(`${drv}${fee}`)
+  }
+  return `${dep}，${route}，${vehicles.join('；')}`
+}
+
+const groupedTasks = computed(() => {
+  const groups = {}
+  for (const t of tasks.value) {
+    const client = t.client_company || t.client_name || '未知'
+    if (!groups[client]) groups[client] = { client, items: [] }
+    groups[client].items.push(formatTaskLine(t))
+  }
+  return Object.values(groups)
+})
+
 onMounted(async () => {
   try {
-    // 从 hash 参数获取筛选条件（发送时序列化的）
     const hash = route.hash.replace('#', '')
     const params = {}
     if (hash) {
@@ -68,8 +72,6 @@ onMounted(async () => {
     if (!params.status) params.status = 'scheduled'
     const res = await api.get('/tasks/filtered', { params })
     tasks.value = res.data
-  } catch (e) {
-    // 公开页面可能未登录，显示空
-  }
+  } catch (e) {}
 })
 </script>
