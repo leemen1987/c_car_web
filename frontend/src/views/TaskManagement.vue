@@ -710,19 +710,19 @@
             <el-checkbox v-model="completeForm.parking_paid_by_client">客户支付</el-checkbox>
           </div>
         </el-form-item>
-        </template>
-        <template v-if="isExternalComplete">
-        <el-form-item label="租车费(元)">
-          <el-input :model-value="completeForm.rental_fee" disabled />
-        </el-form-item>
         <el-form-item label="日利润(元/天)">
           <el-input-number v-model="completeForm.daily_profit_rate" :min="0" :precision="2" style="width:100%" />
         </el-form-item>
         <el-form-item label="打折优惠(元)">
           <el-input-number v-model="completeForm.discount" :min="0" :precision="2" style="width:100%" />
         </el-form-item>
-        <el-form-item :label="'提成利润'">
-          <span style="color:#409eff;font-weight:600">¥{{ currentCompleteTask?.self_drive ? (50 * (currentCompleteTask?.rental_days || 1)).toFixed(2) : ((completeForm.rental_fee || 0) * 0.1).toFixed(2) }}</span>
+        </template>
+        <template v-if="isExternalComplete">
+        <el-form-item label="租车费(元)">
+          <el-input :model-value="completeForm.rental_fee" disabled />
+        </el-form-item>
+        <el-form-item label="提成利润(10%)">
+          <span style="color:#409eff;font-weight:600">¥{{ ((completeForm.rental_fee || 0) * 0.1).toFixed(2) }}</span>
         </el-form-item>
         </template>
         <template v-if="!isSelfDriveComplete && !isExternalComplete">
