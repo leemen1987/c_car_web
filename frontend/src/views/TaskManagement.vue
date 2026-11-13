@@ -1403,7 +1403,7 @@ const onScheduleVehicleChange = (idx, val) => {
   // 选择车辆时自动带出里程数（用于自驾车显示）
 }
 
-const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, parking_fee: 0, fuel_paid_by_client: false, bridge_paid_by_client: false, parking_paid_by_client: false, other_paid_by_client: false, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
+const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, parking_fee: 0, fuel_paid_by_client: true, bridge_paid_by_client: true, parking_paid_by_client: true, other_paid_by_client: true, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
 const completeTaskId = ref(null)
 const currentCompleteTask = ref(null)
 
@@ -1488,11 +1488,28 @@ const actualCostDisplay = computed(() => {
     const rental = completeForm.value.rental_fee || 0
     return (rental - (rental * 0.1 - (completeForm.value.other_fee || 0))).toFixed(2)
   }
+  if (isSelfDriveComplete.value) {
+    let cost = 0
+    if (!completeForm.value.fuel_paid_by_client) cost += completeForm.value.actual_fuel_fee || 0
+    if (!completeForm.value.bridge_paid_by_client) cost += completeForm.value.actual_bridge_fee || 0
+    if (!completeForm.value.parking_paid_by_client) cost += completeForm.value.parking_fee || 0
+    if (!completeForm.value.other_paid_by_client) cost += completeForm.value.other_fee || 0
+    return cost.toFixed(2)
+  }
   return (completeForm.value.actual_fuel_fee + completeForm.value.actual_bridge_fee + completeForm.value.actual_labor_fee + completeForm.value.other_fee).toFixed(2)
 })
 const finalProfitDisplay = computed(() => {
   if (isExternalComplete.value) {
     return ((completeForm.value.rental_fee || 0) * 0.1 - (completeForm.value.other_fee || 0)).toFixed(2)
+  }
+  if (isSelfDriveComplete.value) {
+    const commission = 50 * (currentCompleteTask.value?.rental_days || 1)
+    let cost = 0
+    if (!completeForm.value.fuel_paid_by_client) cost += completeForm.value.actual_fuel_fee || 0
+    if (!completeForm.value.bridge_paid_by_client) cost += completeForm.value.actual_bridge_fee || 0
+    if (!completeForm.value.parking_paid_by_client) cost += completeForm.value.parking_fee || 0
+    if (!completeForm.value.other_paid_by_client) cost += completeForm.value.other_fee || 0
+    return (commission - cost).toFixed(2)
   }
   const task = tasks.value.find(t => t.id === completeTaskId.value)
   const rental = task ? (task.rental_fee || 0) : 0
@@ -1911,6 +1928,10 @@ const showCompleteDialog = (row) => {
     actual_labor_fee: 0,
     other_fee: 0,
     parking_fee: 0,
+    fuel_paid_by_client: true,
+    bridge_paid_by_client: true,
+    parking_paid_by_client: true,
+    other_paid_by_client: true,
     remark: '',
     is_paid: false,
     paid_date: '',
