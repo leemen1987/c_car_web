@@ -710,12 +710,6 @@
             <el-checkbox v-model="completeForm.parking_paid_by_client">客户支付</el-checkbox>
           </div>
         </el-form-item>
-        <el-form-item label="日利润(元/天)">
-          <el-input-number v-model="completeForm.daily_profit_rate" :min="0" :precision="2" style="width:100%" />
-        </el-form-item>
-        <el-form-item label="打折优惠(元)">
-          <el-input-number v-model="completeForm.discount" :min="0" :precision="2" style="width:100%" />
-        </el-form-item>
         </template>
         <template v-if="isExternalComplete">
         <el-form-item label="租车费(元)">
@@ -1409,7 +1403,7 @@ const onScheduleVehicleChange = (idx, val) => {
   // 选择车辆时自动带出里程数（用于自驾车显示）
 }
 
-const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, parking_fee: 0, fuel_paid_by_client: true, bridge_paid_by_client: true, parking_paid_by_client: true, other_paid_by_client: true, daily_profit_rate: 50, discount: 0, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
+const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, parking_fee: 0, fuel_paid_by_client: true, bridge_paid_by_client: true, parking_paid_by_client: true, other_paid_by_client: true, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
 const completeTaskId = ref(null)
 const currentCompleteTask = ref(null)
 
@@ -1509,9 +1503,8 @@ const finalProfitDisplay = computed(() => {
     return ((completeForm.value.rental_fee || 0) * 0.1 - (completeForm.value.other_fee || 0)).toFixed(2)
   }
   if (isSelfDriveComplete.value) {
-    const daily = completeForm.value.daily_profit_rate || 50
-    const days = currentCompleteTask.value?.rental_days || 1
-    let income = daily * days
+    // 租车费（按计费方式算出）+ 客户自付 − 公司支付
+    let income = completeForm.value.rental_fee || 0
     if (completeForm.value.fuel_paid_by_client) income += completeForm.value.actual_fuel_fee || 0
     if (completeForm.value.bridge_paid_by_client) income += completeForm.value.actual_bridge_fee || 0
     if (completeForm.value.parking_paid_by_client) income += completeForm.value.parking_fee || 0
@@ -1521,7 +1514,7 @@ const finalProfitDisplay = computed(() => {
     if (!completeForm.value.bridge_paid_by_client) cost += completeForm.value.actual_bridge_fee || 0
     if (!completeForm.value.parking_paid_by_client) cost += completeForm.value.parking_fee || 0
     if (!completeForm.value.other_paid_by_client) cost += completeForm.value.other_fee || 0
-    return (income - cost - (completeForm.value.discount || 0)).toFixed(2)
+    return (income - cost).toFixed(2)
   }
   const task = tasks.value.find(t => t.id === completeTaskId.value)
   const rental = task ? (task.rental_fee || 0) : 0
