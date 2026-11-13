@@ -693,13 +693,22 @@
           <span style="color:#909399;font-size:12px;margin-left:8px">（里程 × 费率{{ mileageRateForTask ? mileageRateForTask + '元/km' : '' }}）</span>
         </el-form-item>
         <el-form-item label="油费(元)">
-          <el-input-number v-model="completeForm.actual_fuel_fee" :min="0" :precision="2" style="width:100%" />
+          <div style="display:flex;gap:8px;align-items:center">
+            <el-input-number v-model="completeForm.actual_fuel_fee" :min="0" :precision="2" style="flex:1" />
+            <el-checkbox v-model="completeForm.fuel_paid_by_client">客户支付</el-checkbox>
+          </div>
         </el-form-item>
         <el-form-item label="桥路费(元)">
-          <el-input-number v-model="completeForm.actual_bridge_fee" :min="0" :precision="2" style="width:100%" />
+          <div style="display:flex;gap:8px;align-items:center">
+            <el-input-number v-model="completeForm.actual_bridge_fee" :min="0" :precision="2" style="flex:1" />
+            <el-checkbox v-model="completeForm.bridge_paid_by_client">客户支付</el-checkbox>
+          </div>
         </el-form-item>
         <el-form-item label="停车费(元)">
-          <el-input-number v-model="completeForm.parking_fee" :min="0" :precision="2" style="width:100%" />
+          <div style="display:flex;gap:8px;align-items:center">
+            <el-input-number v-model="completeForm.parking_fee" :min="0" :precision="2" style="flex:1" />
+            <el-checkbox v-model="completeForm.parking_paid_by_client">客户支付</el-checkbox>
+          </div>
         </el-form-item>
         </template>
         <template v-if="isExternalComplete">
@@ -722,7 +731,10 @@
         </el-form-item>
         </template>
         <el-form-item label="其他费用">
-          <el-input-number v-model="completeForm.other_fee" :min="0" :precision="2" style="width:100%" />
+          <div style="display:flex;gap:8px;align-items:center">
+            <el-input-number v-model="completeForm.other_fee" :min="0" :precision="2" style="flex:1" />
+            <el-checkbox v-model="completeForm.other_paid_by_client">客户支付</el-checkbox>
+          </div>
         </el-form-item>
         <template v-if="showMileageFields">
           <el-divider>里程数</el-divider>
@@ -1391,7 +1403,7 @@ const onScheduleVehicleChange = (idx, val) => {
   // 选择车辆时自动带出里程数（用于自驾车显示）
 }
 
-const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, parking_fee: 0, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
+const completeForm = ref({ actual_fuel_fee: 0, actual_bridge_fee: 0, actual_labor_fee: 0, other_fee: 0, parking_fee: 0, fuel_paid_by_client: false, bridge_paid_by_client: false, parking_paid_by_client: false, other_paid_by_client: false, remark: '', is_paid: false, paid_date: '', paid_method: '', start_mileage: 0, end_mileage: 0 })
 const completeTaskId = ref(null)
 const currentCompleteTask = ref(null)
 
