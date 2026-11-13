@@ -1749,6 +1749,10 @@ def complete_task(task_id):
     bridge_paid = data.get('bridge_paid_by_client', False)
     parking_paid = data.get('parking_paid_by_client', False)
     other_paid = data.get('other_paid_by_client', False)
+    daily_profit_rate = data.get('daily_profit_rate', 50)
+    discount = data.get('discount', 0)
+    task.daily_profit_rate = daily_profit_rate
+    task.discount = discount
     task.remark = data.get('remark', '')
     task.is_paid = data.get('is_paid', False)
     paid_date = data.get('paid_date')
@@ -1773,9 +1777,18 @@ def complete_task(task_id):
     if task.external_vehicle:
         # 全部外部车辆：自驾车按¥50/天提成，其余按10%提成
         if task.self_drive:
-            # 自驾车：客户支付的费用不扣利润，公司支付的从利润扣除
+            # 自驾车：利润 = 日利润×天数 + 客户自付 − 公司支付 − 打折优惠
             task.actual_labor_fee = 0
-            _commission = 50 * (task.rental_days or 1)
+            _daily = daily_profit_rate or 50
+            _income = _daily * (task.rental_days or 1)
+            if fuel_paid:
+                _income += (task.actual_fuel_fee or 0)
+            if bridge_paid:
+                _income += (task.actual_bridge_fee or 0)
+            if parking_paid:
+                _income += (task.parking_fee or 0)
+            if other_paid:
+                _income += (task.other_fee or 0)
             _cost = 0
             if not fuel_paid:
                 _cost += (task.actual_fuel_fee or 0)
@@ -1785,7 +1798,7 @@ def complete_task(task_id):
                 _cost += (task.parking_fee or 0)
             if not other_paid:
                 _cost += (task.other_fee or 0)
-            task.final_profit = round(_commission - _cost, 2)
+            task.final_profit = round(_income - _cost - (discount or 0), 2)
         else:
             task.actual_fuel_fee = 0
             task.actual_bridge_fee = 0
@@ -3567,6 +3580,17 @@ def init_db():
     except Exception:
         db.session.rollback()
         app.logger.debug("ALTER TABLE tasks client_paid fields skipped (already exists)")
+    try:
+        db.session.execute(db.text("ALTER TABLE tasks ADD COLUMN daily_profit_rate FLOAT DEFAULT 50"))
+        db.session.execute(db.text("ALTER TABLE tasks ADD COLUMN discount FLOAT DEFAULT 0"))
+        db.session.execute(db.text("ALTER TABLE tasks ADD COLUMN fuel_paid_by_client TINYINT(1) DEFAULT 1"))
+        db.session.execute(db.text("ALTER TABLE tasks ADD COLUMN bridge_paid_by_client TINYINT(1) DEFAULT 1"))
+        db.session.execute(db.text("ALTER TABLE tasks ADD COLUMN parking_paid_by_client TINYINT(1) DEFAULT 1"))
+        db.session.execute(db.text("ALTER TABLE tasks ADD COLUMN other_paid_by_client TINYINT(1) DEFAULT 1"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        app.logger.debug("ALTER TABLE tasks profit/discount/client_paid skipped")
 
     # 给 tasks 表增加审批实例相关字段
     for col, typedef in [

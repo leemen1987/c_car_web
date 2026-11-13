@@ -208,6 +208,12 @@ class Task(db.Model):
     actual_labor_fee = db.Column(db.Float, default=0)  # 实际司机人工费
     other_fee = db.Column(db.Float, default=0)  # 其他费用
     parking_fee = db.Column(db.Float, default=0)  # 停车费
+    daily_profit_rate = db.Column(db.Float, default=50)  # 日利润(元/天)
+    discount = db.Column(db.Float, default=0)  # 打折优惠
+    fuel_paid_by_client = db.Column(db.Boolean, default=True)  # 油费客户支付
+    bridge_paid_by_client = db.Column(db.Boolean, default=True)  # 桥路费客户支付
+    parking_paid_by_client = db.Column(db.Boolean, default=True)  # 停车费客户支付
+    other_paid_by_client = db.Column(db.Boolean, default=True)  # 其他费用客户支付
     actual_cost = db.Column(db.Float, default=0)  # 实际成本
     final_profit = db.Column(db.Float, default=0)  # 最终利润
     remark = db.Column(db.Text, default='')  # 备注
@@ -317,6 +323,12 @@ class Task(db.Model):
             'actual_labor_fee': self.actual_labor_fee,
             'other_fee': self.other_fee,
             'parking_fee': self.parking_fee or 0,
+            'daily_profit_rate': self.daily_profit_rate or 50,
+            'discount': self.discount or 0,
+            'fuel_paid_by_client': self.fuel_paid_by_client or False,
+            'bridge_paid_by_client': self.bridge_paid_by_client or False,
+            'parking_paid_by_client': self.parking_paid_by_client or False,
+            'other_paid_by_client': self.other_paid_by_client or False,
             'actual_cost': self.actual_cost,
             'final_profit': self.final_profit,
             'remark': self.remark or '',
